@@ -284,3 +284,34 @@ describe("account deletion with sharing", () => {
     expect((env.DB.db.prepare("SELECT COUNT(*) AS n FROM settings WHERE user_id = 'alice'").get() as { n: number }).n).toBe(0);
   });
 });
+
+describe("abuse limits", () => {
+  it("caps new invites per owner per day", async () => {
+    for (let i = 0; i < 20; i++) {
+      const r = await alice.post(`/loans/${shared.id}/shares`, { email: `p${i}@example.com`, access: "view" });
+      expect(r.status).toBe(201);
+      resetRateLimits();
+    }
+    const over = await alice.post(`/loans/${shared.id}/shares`, { email: "p21@example.com", access: "view" });
+    expect(over.status).toBe(429);
+    expect(over.json.error).toBe("invite_limit");
+    // changing access on an existing invite is not a new invite
+    expect((await alice.post(`/loans/${shared.id}/shares`, { email: "p1@example.com", access: "edit" })).status).toBe(200);
+  });
+
+  it("does not email invites once the daily email cap is reached", async () => {
+    env.EMAIL_DAILY_CAP = "0";
+    await share("view");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fetchMock.mock.calls.filter(([u]) => String(u).includes("api.resend.com"))).toHaveLength(0);
+    expect((await bob.get(`/loans/${shared.id}`)).status).toBe(200); // the share itself still works
+  });
+});
+
+describe("lenders", () => {
+  it("a custom lender used by a card can't be deleted (409, not a server error)", async () => {
+    const l = await alice.post("/lenders", { name: "Credit union", country: "IN", color: "#123456" });
+    await alice.post("/cards", { nickname: "CU card", lenderId: l.json.id, statementDay: 5, dueDay: 25 });
+    expect((await alice.del(`/lenders/${l.json.id}`)).status).toBe(409);
+  });
+});

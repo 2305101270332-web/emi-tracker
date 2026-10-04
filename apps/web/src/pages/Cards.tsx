@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { CreditCard, Pencil, Plus, Trash2 } from "lucide-react";
 import { cardInputSchema, type Card } from "@emi/shared";
-import { HttpError } from "../lib/api";
+import { HttpError, errorMessage } from "../lib/api";
 import { useCards, useDeleteCard, useLenders, useSaveCard } from "../lib/queries";
 import { Dialog, ErrorState, LenderAvatar, PageHeader, SelectField, Spinner, TextField } from "../components/ui";
 
@@ -38,7 +38,7 @@ function CardDialog({ card, onClose }: { card: Card | null; onClose: () => void 
       await save.mutateAsync({ id: card?.id, input: parsed.data });
       onClose();
     } catch (ex) {
-      setError(ex instanceof HttpError ? ex.message : t("common.errorGeneric"));
+      setError(errorMessage(t, ex));
     }
   };
 

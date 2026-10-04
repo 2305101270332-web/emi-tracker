@@ -35,6 +35,17 @@ export const dashboardRoutes = new Hono<AppEnv>();
 
 type Row = Record<string, unknown>;
 
+export const INVITES_PER_DAY = 20;
+
+/** Emails already sent today (UTC), the same count the reminder job uses for Resend's daily quota. */
+async function emailsSentToday(db: D1Database): Promise<number> {
+  const r = await db
+    .prepare("SELECT COUNT(DISTINCT send_id) AS c FROM notifications WHERE channel = 'email' AND status = 'sent' AND created_at >= ?")
+    .bind(new Date().toISOString().slice(0, 10) + "T00:00:00.000Z")
+    .first<{ c: number }>();
+  return Number(r?.c ?? 0);
+}
+
 async function assertLender(db: D1Database, userId: string, lenderId: string) {
   const ok = await db.prepare("SELECT 1 FROM lenders WHERE id = ? AND (user_id IS NULL OR user_id = ?)").bind(lenderId, userId).first();
   if (!ok) throw new ApiError(422, "lender_not_found");
@@ -206,6 +217,13 @@ loanRoutes.post("/:id/shares", rateLimit("share", 20), async (c) => {
   // Link immediately if someone already signed in with that email; otherwise on their first sign-in.
   const existingUser = await c.env.DB.prepare("SELECT id FROM users WHERE lower(email) = ?").bind(email).first<{ id: string }>();
   const prior = await c.env.DB.prepare("SELECT id FROM loan_shares WHERE loan_id = ? AND email = ?").bind(id, email).first<{ id: string }>();
+  if (!prior) {
+    // Invites send email to addresses the owner chooses: cap new invites per owner per day.
+    const recent = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM loan_shares WHERE owner_id = ? AND created_at >= ?")
+      .bind(ctx.ownerId, new Date(Date.now() - 86_400_000).toISOString())
+      .first<{ n: number }>();
+    if (Number(recent?.n ?? 0) >= INVITES_PER_DAY) throw new ApiError(429, "invite_limit");
+  }
   const shareId = prior?.id ?? newId();
   await c.env.DB.prepare(
     `INSERT INTO loan_shares (id, loan_id, owner_id, email, user_id, access, accepted_at) VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -217,7 +235,11 @@ loanRoutes.post("/:id/shares", rateLimit("share", 20), async (c) => {
     const nickname = String(ctx.loan.nickname);
     const invite = shareInviteEmail({ to: email, ownerName: owner?.name || owner?.email || "", loanNickname: nickname, access, appUrl: c.env.APP_ORIGIN, locale: "en" });
     c.executionCtx.waitUntil(
-      sendEmail(c.env, invite).then(async (r) => {
+      (async () => {
+        // Respect the daily Resend budget; the share still works without the email.
+        if ((await emailsSentToday(c.env.DB)) >= Number(c.env.EMAIL_DAILY_CAP ?? 95)) return { ok: false, error: "daily_email_cap" };
+        return sendEmail(c.env, invite);
+      })().then(async (r) => {
         // Logged so it counts toward the daily email cap; failures are visible in logs.
         await c.env.DB.prepare(
           `INSERT INTO notifications (id, user_id, channel, kind, dedupe_key, loan_id, title, body, status, error, send_id)

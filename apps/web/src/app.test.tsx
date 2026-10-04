@@ -161,7 +161,7 @@ describe("shared loans in the UI", () => {
 });
 
 describe("i18n coverage", () => {
-  it("every t('key') used in the web app exists in the English strings", () => {
+  it("every t('key') used in the web app and API exists in the English strings", () => {
     const files: string[] = [];
     const walk = (d: string) => {
       for (const f of readdirSync(d)) {
@@ -171,6 +171,7 @@ describe("i18n coverage", () => {
       }
     };
     walk(join(__dirname));
+    walk(join(__dirname, "..", "..", "api", "src")); // server-side strings (emails, push)
     const missing: string[] = [];
     const has = (key: string) => {
       const v = key.split(".").reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], en);

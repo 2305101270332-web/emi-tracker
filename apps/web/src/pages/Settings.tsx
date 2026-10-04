@@ -6,7 +6,7 @@ import { parseMajor, toMajorString } from "@emi/core";
 import { COMMON_CURRENCIES, COUNTRIES, DATE_FORMATS, TAX_LABELS, countryDefaults, type Settings as SettingsT } from "@emi/shared";
 import { api } from "../lib/api";
 import { useDeleteAccount, useDeleteLender, useDeletionImpact, useLenders, useMe, useSaveSettings } from "../lib/queries";
-import { HttpError } from "../lib/api";
+import { HttpError, errorMessage } from "../lib/api";
 import { getPushState, subscribePush, unsubscribePush, type PushState } from "../lib/pwa";
 import { applyTheme } from "../lib/theme";
 import { Dialog, ErrorState, LenderAvatar, PageHeader, Section, SelectField, Spinner, TextField, Toggle } from "../components/ui";
@@ -397,7 +397,7 @@ export function Settings() {
                 </li>
               ))}
           </ul>
-          {delLender.error && <p role="alert" className="text-sm text-danger">{(delLender.error as Error).message}</p>}
+          {delLender.error && <p role="alert" className="text-sm text-danger">{errorMessage(t, delLender.error)}</p>}
         </Section>
 
         <IncomeSection settings={s} onSave={patch} />

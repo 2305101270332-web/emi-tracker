@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { AlertTriangle, Loader2, X } from "lucide-react";
 import type { InstalmentStatus } from "@emi/core";
 import type { Lender } from "@emi/shared";
+import { errorMessage } from "../lib/api";
 
 export function cx(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(" ");
@@ -137,7 +138,7 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
   return (
     <div role="alert" className="card flex flex-col items-center gap-3 p-6 text-center">
       <AlertTriangle className="text-accent-text" aria-hidden />
-      <p className="text-sm text-muted">{error instanceof Error ? error.message : t("common.errorGeneric")}</p>
+      <p className="text-sm text-muted">{errorMessage(t, error)}</p>
       {onRetry && (
         <button className="btn-secondary" onClick={onRetry}>
           {t("common.retry")}

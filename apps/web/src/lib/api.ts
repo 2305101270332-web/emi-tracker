@@ -17,6 +17,25 @@ export class HttpError extends Error {
   }
 }
 
+type TFn = (key: string, opts?: Record<string, unknown>) => string;
+
+/** Translate an API/engine error into the user's language (never shows raw server English). */
+export function errorMessage(t: TFn, err: unknown): string {
+  if (err instanceof RangeError) return t("form.errors.invalid_amount");
+  if (err instanceof HttpError) {
+    const code = err.body?.error ?? "";
+    if (code === "schedule_error") {
+      const field = String(err.body?.issues?.[0]?.path?.[0] ?? "");
+      return t(`errors.schedule.${field}`, { defaultValue: t("errors.schedule.generic") });
+    }
+    return t(`errors.${code}`, { defaultValue: t("common.errorGeneric") });
+  }
+  // Engine errors raised in the browser (simulator) carry a code too.
+  const code = (err as { code?: string } | null)?.code;
+  if (code) return t(`errors.schedule.${code}`, { defaultValue: t("errors.schedule.generic") });
+  return t("common.errorGeneric");
+}
+
 export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   const res = await fetch(`${BASE}/api${path}`, {
     method: init.method ?? "GET",

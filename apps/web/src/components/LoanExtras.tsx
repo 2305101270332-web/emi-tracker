@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { CalendarPlus, Download, FileDown, FileSpreadsheet, FileText, Info, Paperclip, Send, Trash2, TrendingUp, UserRound, Wallet } from "lucide-react";
 import { parseMajor, simulatePrepayment, type PrepaymentResult } from "@emi/core";
 import { DOCUMENT_TYPES, duesToIcs, scheduleToCsv, toLoanTerms, type LoanDetail, type UpcomingItem } from "@emi/shared";
-import { HttpError } from "../lib/api";
+import { HttpError, errorMessage } from "../lib/api";
 import { downloadBlob, slug } from "../lib/download";
 import { useFormat } from "../lib/format";
 import { exportSchedulePdf } from "../lib/pdf";
@@ -99,7 +99,7 @@ export function RateChanges({ loan }: { loan: LoanDetail }) {
       setDate("");
       setRate("");
     } catch (ex) {
-      setError(ex instanceof HttpError ? ex.message : t("common.errorGeneric"));
+      setError(errorMessage(t, ex));
     }
   };
   return (
@@ -181,7 +181,7 @@ export function PrepaySimulator({ loan }: { loan: LoanDetail }) {
       );
     } catch (ex) {
       setResult(null);
-      setError(ex instanceof RangeError ? t("form.errors.invalid_amount") : ex instanceof Error ? ex.message : t("common.errorGeneric"));
+      setError(errorMessage(t, ex));
     }
   };
 
@@ -354,7 +354,7 @@ export function SharingPanel({ loan }: { loan: LoanDetail }) {
       await invite.mutateAsync({ loanId: loan.id, email, access });
       setEmail("");
     } catch (ex) {
-      setError(ex instanceof HttpError && ex.body?.error === "cannot_share_with_self" ? t("sharing.selfError") : ex instanceof HttpError ? ex.message : t("common.errorGeneric"));
+      setError(errorMessage(t, ex));
     }
   };
 

@@ -55,6 +55,18 @@ changes numbers users see — update the tests in `packages/core/test` alongside
 
 **Flat-rate loans**: prepayment simulation and rate changes stay unavailable, with an explanation shown in the UI.
 
+### Final-pass decisions (security / accessibility review)
+
+| Topic | Decision |
+|---|---|
+| Invite abuse | At most 20 *new* invites per owner per rolling 24 h (429 `invite_limit`); changing access on an existing invite doesn't count. |
+| Invite email budget | Invite emails respect the same daily Resend cap as reminders (`EMAIL_DAILY_CAP`); over the cap the share is still created, only the email is skipped. |
+| Custom lender deletion | Blocked (409) while any of your loans **or cards** use it. |
+| Error text | The API returns error codes; the app translates them (`errors.*` strings), so no raw server English is shown. |
+| Web security headers | Strict CSP via `apps/web/public/_headers` (Google Identity Services allowed; no inline scripts — the theme bootstrap moved to `/theme-init.js`), `frame-ancestors 'none'`, HSTS, nosniff, Referrer-Policy, Permissions-Policy. |
+| Push endpoint re-binding | A push endpoint subscribed by a new account on the same browser moves to that account (expected on shared devices). Endpoints are unguessable capability URLs, so this isn't exploitable for reading anyone's reminders. |
+| Accessibility | Month calendar is a real table (weekday headers, labelled links) instead of an ARIA grid without grid keyboard support; Tools tabs support arrow keys; charts are keyboard-focusable with arrow-key tooltips and a data-table view; `<html lang>` follows the displayed language. |
+
 Bank-statement fixtures live in `packages/core/test/statements/`; each must match to the paisa.
 The two current fixtures are **illustrative** (independently computed with Python `Decimal`),
 not real bank documents — add real statements with `_template.statement.ts`.

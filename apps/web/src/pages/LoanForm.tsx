@@ -16,7 +16,7 @@ import {
   type LoanType,
   type Settings,
 } from "@emi/shared";
-import { HttpError } from "../lib/api";
+import { HttpError, errorMessage } from "../lib/api";
 import { useFormat } from "../lib/format";
 import { useAddLender, useCards, useLenders, useLoan, useMe, useSaveLoan } from "../lib/queries";
 import { Dialog, ErrorState, PageHeader, Section, SelectField, Spinner, TextField, Toggle } from "../components/ui";
@@ -268,8 +268,9 @@ function LoanFormInner({ loan, settings }: { loan?: LoanDetail; settings?: Setti
       const saved = await save.mutateAsync({ id: loan?.id, input: parsed.data });
       navigate(`/loans/${saved.id}`);
     } catch (ex) {
-      if (ex instanceof HttpError) setErrors({ ...ex.fieldErrors(), _form: ex.message });
-      else setErrors({ _form: t("common.errorGeneric") });
+      // Validation issues map onto fields; engine (schedule) errors are shown translated at the form level.
+      if (ex instanceof HttpError && ex.body?.error === "validation_error") setErrors({ ...ex.fieldErrors(), _form: errorMessage(t, ex) });
+      else setErrors({ _form: errorMessage(t, ex) });
     }
   };
 

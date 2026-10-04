@@ -14,13 +14,13 @@ const C1 = "rgb(var(--chart-1))";
 const C2 = "rgb(var(--chart-2))";
 const GRID = "rgb(var(--chart-grid))";
 
-function useWidth<T extends HTMLElement>(fallback = 600) {
+function useWidth<T extends HTMLElement>(fallback = 320) {
   const ref = useRef<T>(null);
   const [w, setW] = useState(fallback);
   useEffect(() => {
     const el = ref.current;
     if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(([e]) => setW(Math.max(260, Math.floor(e!.contentRect.width))));
+    const ro = new ResizeObserver(([e]) => setW(Math.max(200, Math.floor(e!.contentRect.width))));
     ro.observe(el);
     return () => ro.disconnect();
   }, []);

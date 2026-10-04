@@ -14,4 +14,12 @@ void i18n.use(initReactI18next).init({
   returnNull: false,
 });
 
+// Keep <html lang> in sync for screen readers and hyphenation.
+if (typeof document !== "undefined") {
+  // resolvedLanguage = the language actually shown (falls back to "en" if the browser's isn't available).
+  const setLang = () => (document.documentElement.lang = i18n.resolvedLanguage ?? "en");
+  setLang();
+  i18n.on("languageChanged", setLang);
+}
+
 export default i18n;

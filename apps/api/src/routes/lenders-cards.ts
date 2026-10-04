@@ -33,7 +33,11 @@ lenderRoutes.post("/", async (c) => {
 lenderRoutes.delete("/:id", async (c) => {
   const userId = c.get("userId");
   const id = c.req.param("id");
-  const inUse = await c.env.DB.prepare("SELECT 1 FROM loans WHERE lender_id = ? AND user_id = ? LIMIT 1").bind(id, userId).first();
+  const inUse = await c.env.DB.prepare(
+    "SELECT 1 FROM loans WHERE lender_id = ?1 AND user_id = ?2 UNION ALL SELECT 1 FROM cards WHERE lender_id = ?1 AND user_id = ?2 LIMIT 1",
+  )
+    .bind(id, userId)
+    .first();
   if (inUse) throw new ApiError(409, "lender_in_use");
   const res = await c.env.DB.prepare("DELETE FROM lenders WHERE id = ? AND user_id = ?").bind(id, userId).run();
   if (!res.meta.changes) throw notFound();

@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Bell, BellOff, Check, Pencil, PencilLine, SkipForward, Trash2, Undo2, Users } from "lucide-react";
 import { parseMajor, toMajorString } from "@emi/core";
 import type { Instalment, LoanDetail as LoanDetailT } from "@emi/shared";
-import { HttpError } from "../lib/api";
+import { errorMessage } from "../lib/api";
 import { useFormat } from "../lib/format";
 import { useDeleteLoan, useLenders, useLoan, useMuteLoan, useOverride, usePay, useSkip, useUnpay } from "../lib/queries";
 import { BalanceChart, PrincipalInterestChart } from "../components/charts";
@@ -46,7 +46,7 @@ function PayDialog({ inst, loan, onClose }: { inst: Instalment; loan: LoanDetail
       });
       onClose();
     } catch (ex) {
-      setError(ex instanceof RangeError ? t("form.errors.invalid_amount") : ex instanceof Error ? ex.message : t("common.errorGeneric"));
+      setError(errorMessage(t, ex));
     }
   };
   return (
@@ -75,7 +75,7 @@ function OverrideDialog({ inst, loan, onClose }: { inst: Instalment; loan: LoanD
       await override.mutateAsync({ loanId: loan.id, n: inst.n, amount: value });
       onClose();
     } catch (ex) {
-      setError(ex instanceof HttpError ? ex.message : ex instanceof RangeError ? t("form.errors.invalid_amount") : t("common.errorGeneric"));
+      setError(errorMessage(t, ex));
     }
   };
   return (

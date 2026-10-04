@@ -28,6 +28,12 @@ and 2–3 offer comparison ranked by effective annual rate; export schedule to C
 due dates to `.ics`; loan documents in R2 (PDF/PNG/JPEG/WebP, 10 MB each, 100 MB per user,
 type checked by file signature); full JSON data export and account deletion.
 
+**Phase 3** — payoff planner (avalanche vs snowball vs minimum payments, per currency, assumptions
+on screen); private monthly income with a debt-to-income indicator; shared loans (invite by email,
+view or edit access, owner-only sharing/deletion, Resend invite email); account deletion that also
+cleans up sharing; charts for principal vs interest and outstanding balance (loan page, dashboard,
+payoff plan).
+
 Account: per-device sign-out and **sign out of all devices** (session version bump); the
 "Due" window (days before the pay-by date) is a user setting, default 7.
 
@@ -68,66 +74,15 @@ npm test          # core engine, shared schemas, API (integration on real migrat
 npm run typecheck
 ```
 
-## Google OAuth client
+## Deploying
 
-1. Google Cloud Console → APIs & Services → **Credentials** → *Create credentials* → **OAuth client ID** → *Web application*.
-2. **Authorized JavaScript origins:** `http://localhost:5173` and your production origin (e.g. `https://emi-tracker.pages.dev` or your custom domain). No redirect URIs are needed (Google Identity Services popup/One Tap).
-3. Configure the OAuth consent screen (scopes: `openid`, `email`, `profile`).
-4. Put the client ID in `apps/web/.env.local` (`VITE_GOOGLE_CLIENT_ID`) and in `apps/api/wrangler.jsonc` → `vars.GOOGLE_CLIENT_ID` (the Worker verifies the ID token's audience).
+Follow **[docs/DEPLOY.md](docs/DEPLOY.md)** — a step-by-step first-deploy checklist with the exact
+commands: Google OAuth client, D1, R2, VAPID keys, Resend domain + webhook, secrets, Worker and
+Pages deploys, and a smoke test.
 
-## Cloudflare setup
-
-```bash
-cd apps/api
-npx wrangler login
-npx wrangler d1 create emi_tracker            # copy database_id into wrangler.jsonc (both envs)
-npx wrangler r2 bucket create emi-tracker-docs
-npm run db:migrate:remote
-
-# Secrets — never commit these
-npx wrangler secret put SESSION_SECRET        # 32+ random chars: openssl rand -base64 48
-npx wrangler secret put VAPID_PRIVATE_KEY
-npx wrangler secret put RESEND_API_KEY
-npx wrangler secret put RESEND_FROM           # e.g. EMI Tracker <reminders@yourdomain.com>
-npx wrangler secret put RESEND_WEBHOOK_SECRET
-```
-
-Edit `vars` in `apps/api/wrangler.jsonc`: `APP_ORIGIN` and `API_ORIGIN` (both your Pages
-origin, since the API is served through it), `GOOGLE_CLIENT_ID`, `VAPID_PUBLIC_KEY`,
-`VAPID_SUBJECT`.
-
-### VAPID keys (Web Push)
-
-```bash
-npm run vapid -w @emi/api
-```
-Put `VAPID_PUBLIC_KEY` in `wrangler.jsonc` vars and the private key in the
-`VAPID_PRIVATE_KEY` secret. The web app fetches the public key from the API.
-iOS/iPadOS only deliver web push to an **installed** PWA (Add to Home Screen); the app shows
-an install hint on iOS. When permission is denied, reminders still appear in the in-app
-notification centre.
-
-### Resend (email)
-
-1. Create an account at resend.com → **API Keys** → *Create API key* (sending access) → store as `RESEND_API_KEY`.
-2. **Domains → Add domain** (e.g. `mail.yourdomain.com`). Resend shows DNS records (SPF `TXT`/`MX` on `send.` subdomain, DKIM `TXT` `resend._domainkey`, optional DMARC).
-3. In the **Cloudflare dashboard → your zone → DNS → Records**, add each record exactly as shown. Set proxy status to **DNS only** (grey cloud). Click *Verify* in Resend.
-4. Set `RESEND_FROM` to an address on that verified domain.
-5. **Webhooks → Add endpoint:** `https://<your-app-origin>/api/webhooks/resend`, events `email.bounced` and `email.complained`. Copy the signing secret (`whsec_…`) into `RESEND_WEBHOOK_SECRET`. Bounced/complained addresses are never emailed again.
-
-Emails sent: welcome (first login), reminders (same schedule as push: N days before, on the
-day, overdue — several dues in one email), and an optional Monday weekly summary. Every email
-has a one-click unsubscribe link that works without logging in (HMAC-signed token).
-
-### Deploy
-
-```bash
-npm run deploy -w @emi/api                    # Worker + hourly cron
-npm run deploy -w @emi/web                    # builds and deploys Pages (apps/web/wrangler.jsonc)
-```
-The Pages Function `apps/web/functions/api/[[path]].ts` forwards `/api/*` to the Worker via a
-service binding, so the app and API share one origin and the session cookie is first-party
-(`HttpOnly; Secure; SameSite=Lax`). CORS is additionally locked to `APP_ORIGIN`.
+In short: the web app is a Cloudflare Pages project whose Pages Function forwards `/api/*` to the
+API Worker over a service binding, so app and API share one origin and the session cookie is
+first-party (`HttpOnly; Secure; SameSite=Lax`). CORS is additionally locked to `APP_ORIGIN`.
 
 ## Free-tier budget (checked Oct 2026)
 
@@ -147,12 +102,20 @@ sent twice for the same instalment.
 - Google ID tokens verified (signature via Google JWKS, issuer, audience, expiry, verified email).
 - Session: HS256 JWT in an `HttpOnly; Secure; SameSite=Lax` cookie (30 days).
 - Every table carries `user_id`; every query filters by it (ownership tests in `apps/api/test/api.test.ts`).
+- Shared loans: one access check (`apps/api/src/lib/access.ts`) resolves owner / edit / view per
+  request; unshared loans are 404, forbidden actions 403. Shared users never receive the owner's
+  other loans, cards, documents, shares or income (rule-by-rule tests in `apps/api/test/sharing.test.ts`).
+- Abuse limits: 20 new invites per owner per day; all email (reminders, invites) respects the
+  daily Resend cap; uploads are type-checked by file signature with size and per-user quotas.
 - Zod validation on every endpoint, Origin check on state-changing requests, rate limiting
   (Workers Rate Limiting binding with in-memory fallback), strict CORS.
+- Web app headers (`apps/web/public/_headers`): strict Content-Security-Policy (no inline
+  scripts), `frame-ancestors 'none'`, HSTS, nosniff, Referrer-Policy, Permissions-Policy.
 - Secrets only via `wrangler secret`; `.dev.vars` and `.env*` are git-ignored.
 
 ## Adding a language
 
 Copy `packages/shared/src/i18n/en.ts` to e.g. `hi.ts`, translate, and register it in
 `packages/shared/src/i18n/index.ts`. The web app (react-i18next) and server emails share it.
-A test fails if the UI uses a key that's missing from English.
+A test fails if the web app or API uses a key that's missing from English. API errors are
+returned as codes and translated in the app (`errors.*`), so no server English reaches the UI.

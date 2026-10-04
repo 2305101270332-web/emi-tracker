@@ -99,53 +99,65 @@ export function Calendar() {
         ) : q.error ? (
           <ErrorState error={q.error} onRetry={() => void q.refetch()} />
         ) : view === "month" ? (
-          <div role="grid" aria-label={f.monthLabel(month)}>
-            <div role="row" className="grid grid-cols-7 text-center text-xs font-semibold uppercase text-muted">
-              {weekdays.map((w) => (
-                <div role="columnheader" key={w} className="py-1">
-                  {w}
-                </div>
+          // A real table: weekday column headers give each day cell context for screen readers.
+          <table className="w-full table-fixed border-separate border-spacing-0.5 sm:border-spacing-1">
+            <caption className="sr-only">{f.monthLabel(month)}</caption>
+            <thead>
+              <tr>
+                {weekdays.map((w) => (
+                  <th key={w} scope="col" className="py-1 text-center text-[11px] font-semibold uppercase text-muted sm:text-xs">
+                    {w}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: cells.length / 7 }, (_, week) => (
+                <tr key={week}>
+                  {cells.slice(week * 7, week * 7 + 7).map((d, idx) => {
+                    const items = d ? (byDay.get(d) ?? []) : [];
+                    const overdue = items.some((i) => i.status === "overdue");
+                    return (
+                      <td
+                        key={idx}
+                        className={cx(
+                          "h-[84px] rounded-lg border p-0.5 align-top sm:p-1",
+                          d ? "border-line" : "border-transparent",
+                          d === today && "ring-2 ring-primary",
+                          overdue && "bg-accent-soft",
+                        )}
+                      >
+                        {d && (
+                          <div className="text-xs font-semibold text-muted">
+                            <span aria-hidden>{Number(d.slice(8))}</span>
+                            <span className="sr-only">{f.date(d)}</span>
+                          </div>
+                        )}
+                        <ul className="mt-1 space-y-1">
+                          {items.slice(0, 3).map((i) => (
+                            <li key={i.instalmentId}>
+                              <Link
+                                to={`/loans/${i.loanId}`}
+                                className={cx(
+                                  "block truncate rounded px-0.5 text-[10px] font-medium sm:px-1 sm:text-[11px]",
+                                  i.status === "paid" ? "bg-success/15 text-success" : i.status === "overdue" ? "bg-accent text-accent-on" : "bg-primary-soft text-primary-strong",
+                                )}
+                                aria-label={`${i.loanNickname} #${i.n}: ${f.money(i.amount, i.currency)}, ${t(`schedule.statuses.${i.status}`)}`}
+                                title={`${i.loanNickname} · ${f.money(i.amount, i.currency)}`}
+                              >
+                                {f.money(i.amount, i.currency, { compact: true })}
+                              </Link>
+                            </li>
+                          ))}
+                          {items.length > 3 && <li className="px-1 text-[11px] text-muted">+{items.length - 3}</li>}
+                        </ul>
+                      </td>
+                    );
+                  })}
+                </tr>
               ))}
-            </div>
-            <div className="grid grid-cols-7 gap-1">
-              {cells.map((d, idx) => {
-                const items = d ? (byDay.get(d) ?? []) : [];
-                const overdue = items.some((i) => i.status === "overdue");
-                return (
-                  <div
-                    role="gridcell"
-                    key={idx}
-                    className={cx(
-                      "min-h-[84px] rounded-lg border p-1 text-left",
-                      d ? "border-line" : "border-transparent",
-                      d === today && "ring-2 ring-primary",
-                      overdue && "bg-accent-soft",
-                    )}
-                    aria-label={d ? `${f.date(d)}${items.length ? `, ${items.length}` : ""}` : undefined}
-                  >
-                    {d && <div className="text-xs font-semibold text-muted">{Number(d.slice(8))}</div>}
-                    <ul className="mt-1 space-y-1">
-                      {items.slice(0, 3).map((i) => (
-                        <li key={i.instalmentId}>
-                          <Link
-                            to={`/loans/${i.loanId}`}
-                            className={cx(
-                              "block truncate rounded px-1 text-[11px] font-medium",
-                              i.status === "paid" ? "bg-success/15 text-success" : i.status === "overdue" ? "bg-accent text-accent-on" : "bg-primary-soft text-primary-strong",
-                            )}
-                            title={`${i.loanNickname} · ${f.money(i.amount, i.currency)}`}
-                          >
-                            {f.money(i.amount, i.currency, { compact: true })}
-                          </Link>
-                        </li>
-                      ))}
-                      {items.length > 3 && <li className="px-1 text-[11px] text-muted">+{items.length - 3}</li>}
-                    </ul>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+            </tbody>
+          </table>
         ) : (q.data ?? []).length === 0 ? (
           <p className="text-muted">{t("calendar.noDues")}</p>
         ) : (

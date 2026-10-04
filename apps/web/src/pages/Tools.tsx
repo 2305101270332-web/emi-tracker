@@ -269,6 +269,16 @@ export function Tools() {
             id={`tab-${v}`}
             aria-selected={tab === v}
             aria-controls={`panel-${v}`}
+            tabIndex={tab === v ? 0 : -1}
+            onKeyDown={(e) => {
+              const order = ["calculator", "compare", "payoff"] as const;
+              const i = order.indexOf(v);
+              const next = e.key === "ArrowRight" ? order[(i + 1) % 3] : e.key === "ArrowLeft" ? order[(i + 2) % 3] : null;
+              if (!next) return;
+              e.preventDefault();
+              setTab(next);
+              document.getElementById(`tab-${next}`)?.focus();
+            }}
             className={cx("min-h-[40px] shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-medium sm:px-4", tab === v ? "bg-primary text-primary-on" : "text-muted")}
             onClick={() => setTab(v)}
           >
