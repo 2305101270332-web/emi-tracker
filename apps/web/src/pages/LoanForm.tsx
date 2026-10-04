@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 import { buildSchedule, currencyFractionDigits, parseISODate, parseMajor, toMajorString } from "@emi/core";
@@ -11,6 +11,7 @@ import {
   loanInputSchema,
   toLoanTerms,
   type Loan,
+  type LoanDetail,
   type LoanInputRaw,
   type LoanType,
   type Settings,
@@ -127,6 +128,8 @@ function initialState(settings: Settings | undefined, loan: Loan | undefined, to
 }
 
 /** Form strings -> API input. Money is converted to integer minor units here (no float math). */
+const OWNER_CARD_PLACEHOLDER = "owner-card";
+
 function toRaw(s: FormState): LoanInputRaw {
   const money = (v: string) => {
     try {
@@ -208,17 +211,22 @@ export function LoanForm() {
   const existing = useLoan(id);
   if (me.isLoading || (id && existing.isLoading)) return <Spinner />;
   if (id && existing.error) return <ErrorState error={existing.error} />;
+  if (existing.data && existing.data.access === "view") return <Navigate to={`/loans/${existing.data.id}`} replace />;
   return <LoanFormInner key={id ?? "new"} loan={existing.data} settings={me.data?.settings} />;
 }
 
-function LoanFormInner({ loan, settings }: { loan?: Loan; settings?: Settings }) {
+function LoanFormInner({ loan, settings }: { loan?: LoanDetail; settings?: Settings }) {
   const { t } = useTranslation();
   const f = useFormat();
   const navigate = useNavigate();
   const lenders = useLenders();
   const cards = useCards();
   const save = useSaveLoan();
-  const [s, setS] = useState<FormState>(() => initialState(settings, loan, f.today()));
+  const isEditor = loan?.access === "edit";
+  const [s, setS] = useState<FormState>(() => {
+    const st = initialState(settings, loan, f.today());
+    return isEditor && st.type === "credit_card_emi" ? { ...st, cardId: OWNER_CARD_PLACEHOLDER } : st;
+  });
   const [emiDayTouched, setEmiDayTouched] = useState(!!loan);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [lenderDialog, setLenderDialog] = useState(false);
@@ -275,6 +283,19 @@ function LoanFormInner({ loan, settings }: { loan?: Loan; settings?: Settings })
         <div className="space-y-6 lg:col-span-2">
           <Section title={t("form.sectionBasics")}>
             <div className="grid gap-4 sm:grid-cols-2">
+              {isEditor && loan ? (
+                <dl className="grid gap-3 rounded-xl bg-surface-2 p-3 text-sm sm:col-span-2 sm:grid-cols-2">
+                  <div>
+                    <dt className="text-muted">{t("form.lender")}</dt>
+                    <dd className="font-medium">{loan.lender?.name ?? "—"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">{t("form.loanType")}</dt>
+                    <dd className="font-medium">{loan.type === "other" ? loan.customTypeLabel : t(`loans.types.${loan.type}`)}</dd>
+                  </div>
+                </dl>
+              ) : (
+              <>
               <div>
                 <SelectField label={t("form.lender")} value={s.lenderId} onChange={(e) => set("lenderId", e.target.value)} error={err("lenderId")} required>
                   <option value="">—</option>
@@ -316,6 +337,8 @@ function LoanFormInner({ loan, settings }: { loan?: Loan; settings?: Settings })
                     </option>
                   ))}
                 </SelectField>
+              )}
+              </>
               )}
               <TextField
                 label={t("form.nickname")}

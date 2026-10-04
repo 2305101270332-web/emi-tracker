@@ -57,6 +57,8 @@ export interface Instalment {
   closing: number;
   overridden: boolean;
   skipped: boolean;
+  /** Annual rate applied to this instalment (changes with floating-rate changes). */
+  annualRate: number;
   status: InstalmentStatus;
   payment: Payment | null;
 }
@@ -67,10 +69,34 @@ export interface Loan extends LoanInput {
   updatedAt: string;
 }
 
+/** The viewer's role on a loan: owner, or a shared user with edit/view access. */
+export type LoanAccess = "owner" | "edit" | "view";
+
+export interface LenderSnapshot {
+  name: string;
+  color: string;
+  initial: string;
+}
+
 export interface LoanListItem extends Loan {
   summary: ScheduleSummary;
   progress: LoanProgress;
   nextInstalment: Instalment | null;
+  access: LoanAccess;
+  /** Lender name/colour so shared users can see it without access to the owner's custom lenders. */
+  lender: LenderSnapshot | null;
+  /** Owner's display name; set only for loans shared with the viewer. */
+  ownerName: string | null;
+}
+
+export interface LoanShare {
+  id: string;
+  email: string;
+  access: "view" | "edit";
+  /** pending = invited email has not signed in yet. */
+  status: "pending" | "active";
+  name: string | null;
+  createdAt: string;
 }
 
 export interface RateChangeRecord {
@@ -91,7 +117,10 @@ export interface LoanDocument {
 export interface LoanDetail extends LoanListItem {
   instalments: Instalment[];
   rateChanges: RateChangeRecord[];
+  /** Owner only; empty for shared users. */
   documents: LoanDocument[];
+  /** Owner only; empty for shared users. */
+  shares: LoanShare[];
 }
 
 export type MoneyByCurrency = Record<string, number>;
@@ -130,6 +159,27 @@ export interface Dashboard {
   byType: Record<string, MoneyByCurrency>;
   upcoming: PayByGroup[];
   activeLoans: number;
+  /** Debt-to-income in the income currency; null when no income is set. */
+  dti: {
+    currency: string;
+    income: number;
+    obligations: number;
+    ratio: number;
+    band: "healthy" | "caution" | "high";
+    /** Active loans in other currencies, not counted. */
+    excludedLoans: number;
+  } | null;
+  /** Projected outstanding principal at each month end, per currency (own loans, schedule assumed paid). */
+  balanceTrend: Record<string, { date: string; outstanding: number }[]>;
+}
+
+export interface DeletionImpact {
+  ownedLoans: number;
+  /** Owned loans that are shared with someone (their access will be revoked). */
+  ownedSharedLoans: number;
+  shareRecipients: number;
+  /** Loans other people shared with this user (the user is removed from them). */
+  sharedWithMe: number;
 }
 
 export interface AppNotification {

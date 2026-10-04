@@ -20,6 +20,9 @@ export const originGuard: MiddlewareHandler<AppEnv> = async (c, next) => {
 // Fallback limiter when the Workers rate-limit binding is absent (tests, older wrangler).
 const buckets = new Map<string, { count: number; reset: number }>();
 
+/** Tests only: clear the in-memory fallback limiter between cases. */
+export const resetRateLimits = () => buckets.clear();
+
 async function allow(env: AppEnv["Bindings"], key: string, limit: number): Promise<boolean> {
   if (env.RATE_LIMITER) {
     const { success } = await env.RATE_LIMITER.limit({ key });

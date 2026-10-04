@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { deleteAccountSchema, settingsPatchSchema, type Me, type Settings } from "@emi/shared";
+import { deleteAccountSchema, settingsPatchSchema, type DeletionImpact, type Me, type Settings } from "@emi/shared";
 import { clearSession } from "../lib/auth";
 import type { AppEnv } from "../env";
 import { ApiError, notFound } from "../lib/errors";
@@ -36,6 +36,27 @@ accountRoutes.patch("/settings", async (c) => {
   return c.json(settingsFromRow(row!));
 });
 
+/** What deleting the account will do, shown in the confirmation step. */
+accountRoutes.get("/account/deletion-impact", async (c) => {
+  const userId = c.get("userId");
+  const row = await c.env.DB.prepare(
+    `SELECT
+       (SELECT COUNT(*) FROM loans WHERE user_id = ?1) AS owned_loans,
+       (SELECT COUNT(DISTINCT loan_id) FROM loan_shares WHERE owner_id = ?1) AS owned_shared_loans,
+       (SELECT COUNT(DISTINCT email) FROM loan_shares WHERE owner_id = ?1) AS share_recipients,
+       (SELECT COUNT(*) FROM loan_shares WHERE user_id = ?1) AS shared_with_me`,
+  )
+    .bind(userId)
+    .first<Record<string, number>>();
+  const impact: DeletionImpact = {
+    ownedLoans: Number(row?.owned_loans ?? 0),
+    ownedSharedLoans: Number(row?.owned_shared_loans ?? 0),
+    shareRecipients: Number(row?.share_recipients ?? 0),
+    sharedWithMe: Number(row?.shared_with_me ?? 0),
+  };
+  return c.json(impact);
+});
+
 /** Tables holding user data, children first (deletion order). */
 const USER_TABLES = ["notifications", "push_subscriptions", "documents", "payments", "instalments", "rate_changes", "loans", "cards", "lenders", "settings"] as const;
 
@@ -60,6 +81,13 @@ accountRoutes.get("/account/export", async (c) => {
     if (t === "documents") rows = rows.map(({ r2_key: _k, ...rest }) => rest);
     data[t] = rows;
   });
+  // Sharing: who you shared your loans with, and which loans are shared with you (ids + access only).
+  const [given, received] = await db.batch([
+    db.prepare("SELECT id, loan_id, email, access, created_at, accepted_at FROM loan_shares WHERE owner_id = ?").bind(userId),
+    db.prepare("SELECT loan_id, access, created_at, accepted_at FROM loan_shares WHERE user_id = ?").bind(userId),
+  ]);
+  data.sharesGiven = given!.results;
+  data.sharesReceived = received!.results;
   return new Response(JSON.stringify(data, null, 2), {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
@@ -88,6 +116,9 @@ accountRoutes.delete("/account", async (c) => {
   } while (cursor);
 
   await db.batch([
+    // Sharing: revoke every share on loans this user owns, and remove them from loans
+    // shared with them (including pending invites to their email). Others' loans are untouched.
+    db.prepare("DELETE FROM loan_shares WHERE owner_id = ?1 OR user_id = ?1 OR email = lower(?2)").bind(userId, user.email),
     ...USER_TABLES.map((t) => db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).bind(userId)),
     db.prepare("DELETE FROM users WHERE id = ?").bind(userId),
   ]);

@@ -14,3 +14,6 @@ if (!window.matchMedia) {
     dispatchEvent: () => false,
   })) as typeof window.matchMedia;
 }
+
+// jsdom doesn't implement scrolling
+window.scrollTo = (() => undefined) as typeof window.scrollTo;

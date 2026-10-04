@@ -26,6 +26,11 @@
   --accent-soft: 255 236 217;
   --danger: 190 24 52;
   --success: 21 128 61;
+  /* Chart series (validated: CVD + normal-vision separation, light surface). The orange's
+     low contrast on white is relieved by legends, direct labels and a table view. */
+  --chart-1: 0 119 182;
+  --chart-2: 255 122 0;
+  --chart-grid: 214 228 238;
   color-scheme: light;
 }
 
@@ -46,6 +51,10 @@
   --accent-soft: 64 36 10;
   --danger: 255 120 140;
   --success: 86 220 140;
+  /* Dark chart steps, validated separately against the dark surface. */
+  --chart-1: 58 154 217;
+  --chart-2: 224 108 10;
+  --chart-grid: 33 60 85;
   color-scheme: dark;
 }
 

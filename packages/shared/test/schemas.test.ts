@@ -60,7 +60,7 @@ describe("settingsSchema", () => {
     const base = {
       country: "IN", currency: "INR", locale: "en-IN", timeZone: "Asia/Kolkata", dateFormat: "DD/MM/YYYY",
       taxLabel: "GST", taxRate: 18, theme: "system", reminderHour: 9, dueWindowDays: 7, reminderDaysBefore: [3, 1],
-      remindOnDay: true, remindOverdue: true, pushEnabled: true, emailReminders: true, weeklySummary: false,
+      remindOnDay: true, remindOverdue: true, pushEnabled: true, emailReminders: true, weeklySummary: false, monthlyIncome: null, incomeCurrency: null,
     };
     expect(settingsSchema.safeParse(base).success).toBe(true);
     expect(settingsSchema.safeParse({ ...base, timeZone: "Mars/Olympus" }).success).toBe(false);

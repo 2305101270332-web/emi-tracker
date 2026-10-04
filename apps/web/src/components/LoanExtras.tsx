@@ -1,13 +1,13 @@
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { CalendarPlus, Download, FileDown, FileSpreadsheet, FileText, Paperclip, Trash2, TrendingUp, Wallet } from "lucide-react";
+import { CalendarPlus, Download, FileDown, FileSpreadsheet, FileText, Info, Paperclip, Send, Trash2, TrendingUp, UserRound, Wallet } from "lucide-react";
 import { parseMajor, simulatePrepayment, type PrepaymentResult } from "@emi/core";
 import { DOCUMENT_TYPES, duesToIcs, scheduleToCsv, toLoanTerms, type LoanDetail, type UpcomingItem } from "@emi/shared";
 import { HttpError } from "../lib/api";
 import { downloadBlob, slug } from "../lib/download";
 import { useFormat } from "../lib/format";
 import { exportSchedulePdf } from "../lib/pdf";
-import { useAddRateChange, useDeleteDocument, useDeleteRateChange, useMe, useUploadDocument } from "../lib/queries";
+import { useAddRateChange, useChangeShare, useDeleteDocument, useDeleteRateChange, useInvite, useMe, useRevokeShare, useUploadDocument } from "../lib/queries";
 import { Section, SelectField, TextField, cx } from "./ui";
 
 /** Engine terms for a saved loan, including its manual overrides and rate changes. */
@@ -83,10 +83,14 @@ export function RateChanges({ loan }: { loan: LoanDetail }) {
   if (loan.repaymentType !== "reducing") {
     return (
       <Section title={t("rateChanges.title")}>
-        <p className="text-sm text-muted">{t("rateChanges.reducingOnly")}</p>
+        <p className="flex gap-2 text-sm text-muted">
+          <Info size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
+          {t("flatRate.rateChangeUnavailable")}
+        </p>
       </Section>
     );
   }
+  const canEdit = loan.access !== "view";
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -112,13 +116,16 @@ export function RateChanges({ loan }: { loan: LoanDetail }) {
                 <strong>{f.date(rc.effectiveDate)}</strong> → {f.percent(rc.annualRate)} ·{" "}
                 <span className="text-muted">{rc.mode === "keep_emi" ? t("rateChanges.keepEmi") : t("rateChanges.keepTenure")}</span>
               </span>
-              <button className="btn-ghost px-2 text-danger" onClick={() => del.mutate({ loanId: loan.id, id: rc.id })} aria-label={t("rateChanges.remove")}>
-                <Trash2 size={16} aria-hidden />
-              </button>
+              {canEdit && (
+                <button className="btn-ghost px-2 text-danger" onClick={() => del.mutate({ loanId: loan.id, id: rc.id })} aria-label={t("rateChanges.remove")}>
+                  <Trash2 size={16} aria-hidden />
+                </button>
+              )}
             </li>
           ))}
         </ul>
       )}
+      {canEdit && (
       <form onSubmit={(e) => void submit(e)} className="grid gap-3 sm:grid-cols-4 sm:items-end">
         <TextField label={t("rateChanges.effectiveDate")} type="date" value={date} onChange={(e) => setDate(e.target.value)} required min={loan.bookingDate} />
         <TextField label={t("rateChanges.newRate")} inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} required />
@@ -130,6 +137,7 @@ export function RateChanges({ loan }: { loan: LoanDetail }) {
           {t("rateChanges.add")}
         </button>
       </form>
+      )}
       {error && (
         <p role="alert" className="mt-2 text-sm text-danger">
           {error}
@@ -153,7 +161,16 @@ export function PrepaySimulator({ loan }: { loan: LoanDetail }) {
   const [error, setError] = useState<string | null>(null);
   const terms = useMemo(() => termsForLoan(loan), [loan]);
 
-  if (loan.repaymentType !== "reducing") return null;
+  if (loan.repaymentType !== "reducing") {
+    return (
+      <Section title={t("prepay.title")}>
+        <p className="flex gap-2 text-sm text-muted">
+          <Info size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
+          {t("flatRate.prepayUnavailable")}
+        </p>
+      </Section>
+    );
+  }
 
   const run = (e: FormEvent) => {
     e.preventDefault();
@@ -311,6 +328,87 @@ export function Documents({ loan }: { loan: LoanDetail }) {
       <label htmlFor={`doc-${loan.id}`} className={cx("btn-secondary cursor-pointer", upload.isPending && "pointer-events-none opacity-50")}>
         <FileDown size={16} aria-hidden /> {upload.isPending ? t("documents.uploading") : t("documents.upload")}
       </label>
+      {error && (
+        <p role="alert" className="mt-2 text-sm text-danger">
+          {error}
+        </p>
+      )}
+    </Section>
+  );
+}
+
+export function SharingPanel({ loan }: { loan: LoanDetail }) {
+  const { t } = useTranslation();
+  const invite = useInvite();
+  const change = useChangeShare();
+  const revoke = useRevokeShare();
+  const [email, setEmail] = useState("");
+  const [access, setAccess] = useState<"view" | "edit">("view");
+  const [error, setError] = useState<string | null>(null);
+  if (loan.access !== "owner") return null;
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    try {
+      await invite.mutateAsync({ loanId: loan.id, email, access });
+      setEmail("");
+    } catch (ex) {
+      setError(ex instanceof HttpError && ex.body?.error === "cannot_share_with_self" ? t("sharing.selfError") : ex instanceof HttpError ? ex.message : t("common.errorGeneric"));
+    }
+  };
+
+  return (
+    <Section title={t("sharing.title")}>
+      <p className="mb-1 text-sm text-muted">{t("sharing.intro")}</p>
+      <p className="mb-3 text-xs text-muted">{t("sharing.privacyNote")}</p>
+      {loan.shares.length === 0 ? (
+        <p className="mb-3 text-sm text-muted">{t("sharing.empty")}</p>
+      ) : (
+        <ul className="mb-4 divide-y divide-line">
+          {loan.shares.map((s) => (
+            <li key={s.id} className="flex flex-wrap items-center gap-3 py-2 text-sm">
+              <UserRound size={16} className="text-primary" aria-hidden />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">{s.name ?? s.email}</span>
+                <span className="block truncate text-xs text-muted">
+                  {s.name ? `${s.email} · ` : ""}
+                  {s.status === "active" ? t("sharing.active") : t("sharing.pending")}
+                </span>
+              </span>
+              <label className="sr-only" htmlFor={`share-${s.id}`}>
+                {t("sharing.access")} — {s.email}
+              </label>
+              <select
+                id={`share-${s.id}`}
+                className="input w-auto min-w-[8rem]"
+                value={s.access}
+                onChange={(e) => change.mutate({ loanId: loan.id, shareId: s.id, access: e.target.value as "view" | "edit" })}
+              >
+                <option value="view">{t("sharing.view")}</option>
+                <option value="edit">{t("sharing.edit")}</option>
+              </select>
+              <button
+                className="btn-ghost px-2 text-danger"
+                onClick={() => confirm(t("sharing.revokeConfirm", { email: s.email })) && revoke.mutate({ loanId: loan.id, shareId: s.id })}
+                aria-label={`${t("sharing.revoke")} — ${s.email}`}
+              >
+                <Trash2 size={16} aria-hidden />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form onSubmit={(e) => void submit(e)} className="grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+        <TextField label={t("sharing.email")} type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required maxLength={320} />
+        <SelectField label={t("sharing.access")} value={access} onChange={(e) => setAccess(e.target.value as "view" | "edit")}>
+          <option value="view">{t("sharing.view")}</option>
+          <option value="edit">{t("sharing.edit")}</option>
+        </SelectField>
+        <button className="btn-primary" disabled={invite.isPending || !email}>
+          <Send size={16} aria-hidden /> {invite.isPending ? t("sharing.inviting") : t("sharing.invite")}
+        </button>
+      </form>
       {error && (
         <p role="alert" className="mt-2 text-sm text-danger">
           {error}

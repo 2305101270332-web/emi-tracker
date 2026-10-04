@@ -26,6 +26,8 @@ export function settingsFromRow(r: Row): Settings {
     pushEnabled: bool(r.push_enabled),
     emailReminders: bool(r.email_reminders),
     weeklySummary: bool(r.weekly_summary),
+    monthlyIncome: r.monthly_income === null || r.monthly_income === undefined ? null : num(r.monthly_income),
+    incomeCurrency: str(r.income_currency),
   };
 }
 
@@ -46,6 +48,8 @@ export const SETTINGS_COLUMNS: Record<keyof Settings, string> = {
   pushEnabled: "push_enabled",
   emailReminders: "email_reminders",
   weeklySummary: "weekly_summary",
+  monthlyIncome: "monthly_income",
+  incomeCurrency: "income_currency",
 };
 
 export function settingsValue(key: keyof Settings, v: unknown): unknown {

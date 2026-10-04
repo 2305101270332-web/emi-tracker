@@ -12,6 +12,8 @@ import type {
   Me,
   PaymentInput,
   RateChangeInput,
+  LoanShare,
+  DeletionImpact,
   Settings,
   UpcomingItem,
 } from "@emi/shared";
@@ -164,3 +166,38 @@ export const useUploadDocument = () =>
 export const useDeleteDocument = () => useLoanDetailMutation((id: string) => api<LoanDetail>(`/documents/${id}`, { method: "DELETE" }));
 
 export const useDeleteAccount = () => useMutation({ mutationFn: (confirmEmail: string) => api<void>("/account", { method: "DELETE", body: { confirmEmail } }) });
+
+// ---- Phase 3 -----------------------------------------------------------------------------
+
+export const useSharedLoans = () => useQuery({ queryKey: ["loans", "shared"], queryFn: () => api<LoanListItem[]>("/loans/shared") });
+
+function useSharesMutation<TVars>(fn: (v: TVars) => Promise<LoanShare[]>, loanId: (v: TVars) => string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: (shares, vars) => {
+      qc.setQueryData<LoanDetail>(keys.loan(loanId(vars)), (l) => (l ? { ...l, shares } : l));
+    },
+  });
+}
+
+export const useInvite = () =>
+  useSharesMutation(
+    ({ loanId, email, access }: { loanId: string; email: string; access: "view" | "edit" }) =>
+      api<LoanShare[]>(`/loans/${loanId}/shares`, { method: "POST", body: { email, access } }),
+    (v) => v.loanId,
+  );
+export const useChangeShare = () =>
+  useSharesMutation(
+    ({ loanId, shareId, access }: { loanId: string; shareId: string; access: "view" | "edit" }) =>
+      api<LoanShare[]>(`/loans/${loanId}/shares/${shareId}`, { method: "PATCH", body: { access } }),
+    (v) => v.loanId,
+  );
+export const useRevokeShare = () =>
+  useSharesMutation(
+    ({ loanId, shareId }: { loanId: string; shareId: string }) => api<LoanShare[]>(`/loans/${loanId}/shares/${shareId}`, { method: "DELETE" }),
+    (v) => v.loanId,
+  );
+
+export const useDeletionImpact = (enabled: boolean) =>
+  useQuery({ queryKey: ["deletion-impact"], queryFn: () => api<DeletionImpact>("/account/deletion-impact"), enabled, staleTime: 0 });

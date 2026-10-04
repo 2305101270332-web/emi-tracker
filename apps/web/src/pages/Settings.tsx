@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
-import { Download, LogOut, MonitorSmartphone, Trash2, UserX } from "lucide-react";
+import { AlertTriangle, Download, Lock, LogOut, MonitorSmartphone, Trash2, UserX } from "lucide-react";
+import { parseMajor, toMajorString } from "@emi/core";
 import { COMMON_CURRENCIES, COUNTRIES, DATE_FORMATS, TAX_LABELS, countryDefaults, type Settings as SettingsT } from "@emi/shared";
 import { api } from "../lib/api";
-import { useDeleteAccount, useDeleteLender, useLenders, useMe, useSaveSettings } from "../lib/queries";
+import { useDeleteAccount, useDeleteLender, useDeletionImpact, useLenders, useMe, useSaveSettings } from "../lib/queries";
 import { HttpError } from "../lib/api";
 import { getPushState, subscribePush, unsubscribePush, type PushState } from "../lib/pwa";
 import { applyTheme } from "../lib/theme";
@@ -67,10 +68,63 @@ function PushSettings() {
   );
 }
 
+function IncomeSection({ settings, onSave }: { settings: SettingsT; onSave: (p: Partial<SettingsT>) => Promise<void> }) {
+  const { t } = useTranslation();
+  const currency = settings.incomeCurrency ?? settings.currency;
+  const [value, setValue] = useState(settings.monthlyIncome !== null ? toMajorString(settings.monthlyIncome, currency) : "");
+  const [error, setError] = useState<string | null>(null);
+  const save = async (raw: string, cur: string) => {
+    setError(null);
+    if (!raw.trim()) return onSave({ monthlyIncome: null, incomeCurrency: null });
+    try {
+      await onSave({ monthlyIncome: parseMajor(raw, cur), incomeCurrency: cur });
+    } catch {
+      setError(t("form.errors.invalid_amount"));
+    }
+  };
+  return (
+    <Section title={t("settings.income")}>
+      <p className="mb-3 flex gap-2 text-sm text-muted">
+        <Lock size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
+        {t("settings.incomeIntro")}
+      </p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <TextField
+          label={t("settings.monthlyIncome")}
+          inputMode="decimal"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={() => void save(value, currency)}
+          error={error ?? undefined}
+        />
+        <SelectField label={t("settings.incomeCurrency")} value={currency} onChange={(e) => void save(value, e.target.value)}>
+          {[...new Set([currency, ...COMMON_CURRENCIES])].map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </SelectField>
+      </div>
+      {settings.monthlyIncome !== null && (
+        <button
+          className="btn-ghost mt-2"
+          onClick={() => {
+            setValue("");
+            void save("", currency);
+          }}
+        >
+          {t("settings.incomeClear")}
+        </button>
+      )}
+    </Section>
+  );
+}
+
 function DataSection({ email, onDeleted }: { email: string; onDeleted: () => void }) {
   const { t } = useTranslation();
   const del = useDeleteAccount();
   const [open, setOpen] = useState(false);
+  const impact = useDeletionImpact(open);
   const [typed, setTyped] = useState("");
   const [error, setError] = useState<string | null>(null);
   const base = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
@@ -101,6 +155,23 @@ function DataSection({ email, onDeleted }: { email: string; onDeleted: () => voi
           }}
         >
           <p className="text-sm text-muted">{t("data.deleteHint")}</p>
+          <div className="rounded-xl border border-danger/40 bg-danger/5 p-3">
+            <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-danger">
+              <AlertTriangle size={16} aria-hidden /> {t("data.impactTitle")}
+            </p>
+            {impact.data ? (
+              <ul className="list-disc space-y-1 pl-5 text-sm">
+                <li>{t("data.impactOwned", { count: impact.data.ownedLoans })}</li>
+                {impact.data.ownedSharedLoans > 0 && (
+                  <li>{t("data.impactShared", { recipients: impact.data.shareRecipients, loans: impact.data.ownedSharedLoans })}</li>
+                )}
+                {impact.data.sharedWithMe > 0 && <li>{t("data.impactSharedWithMe", { count: impact.data.sharedWithMe })}</li>}
+                <li>{t("data.impactIncome")}</li>
+              </ul>
+            ) : (
+              <p className="text-sm text-muted">{t("common.loading")}</p>
+            )}
+          </div>
           <TextField label={t("data.deleteConfirmLabel")} hint={t("data.deleteConfirmBody", { email })} type="email" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" required />
           {error && (
             <p role="alert" className="text-sm text-danger">
@@ -328,6 +399,8 @@ export function Settings() {
           </ul>
           {delLender.error && <p role="alert" className="text-sm text-danger">{(delLender.error as Error).message}</p>}
         </Section>
+
+        <IncomeSection settings={s} onSave={patch} />
 
         <DataSection
           email={me.data.user.email}

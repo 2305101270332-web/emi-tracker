@@ -1,9 +1,10 @@
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, CalendarClock, Plus, Wallet } from "lucide-react";
+import { AlertOctagon, AlertTriangle, CalendarClock, CheckCircle2, Plus, Wallet } from "lucide-react";
 import type { Dashboard as DashboardData, Lender, PayByGroup } from "@emi/shared";
 import { currencyEntries, useFormat } from "../lib/format";
 import { useCards, useDashboard, useLenders, useMe } from "../lib/queries";
+import { BalanceChart } from "../components/charts";
 import { ErrorState, LenderAvatar, MoneyLines, PageHeader, Section, Spinner, StatusBadge, cx } from "../components/ui";
 
 function Tile({ label, totals, tone = "default", icon }: { label: string; totals: Record<string, number>; tone?: "default" | "accent" | "warn"; icon?: React.ReactNode }) {
@@ -66,6 +67,54 @@ function Breakdown({ title, data, label }: { title: string; data: Record<string,
           );
         })}
       </div>
+    </Section>
+  );
+}
+
+const DTI_STYLE = {
+  healthy: { bar: "bg-success", text: "text-success", Icon: CheckCircle2 },
+  caution: { bar: "bg-accent", text: "text-accent-text", Icon: AlertTriangle },
+  high: { bar: "bg-danger", text: "text-danger", Icon: AlertOctagon },
+} as const;
+
+function DtiCard({ dti }: { dti: DashboardData["dti"] }) {
+  const { t } = useTranslation();
+  const f = useFormat();
+  if (!dti) {
+    return (
+      <Section title={t("dashboard.dti")}>
+        <p className="text-sm text-muted">{t("dashboard.dtiSetIncome")}</p>
+        <Link to="/settings" className="btn-ghost mt-2">
+          {t("nav.settings")}
+        </Link>
+      </Section>
+    );
+  }
+  const pct = Math.round(dti.ratio * 1000) / 10;
+  const style = DTI_STYLE[dti.band];
+  return (
+    <Section title={t("dashboard.dti")}>
+      <p className={cx("num text-3xl font-bold", style.text)}>{f.percent(pct, 1)}</p>
+      <p className={cx("mt-1 flex items-center gap-1 text-sm font-semibold", style.text)}>
+        <style.Icon size={16} aria-hidden /> {t(`dashboard.dtiBands.${dti.band}`)}
+      </p>
+      <div
+        className="relative mt-3 h-2 rounded-full bg-surface-2"
+        role="meter"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={pct}
+        aria-label={t("dashboard.dti")}
+      >
+        <div className={cx("h-2 rounded-full", style.bar)} style={{ width: `${Math.min(100, pct)}%` }} />
+        {[30, 40].map((m) => (
+          <span key={m} aria-hidden className="absolute top-[-3px] h-3.5 w-0.5 bg-muted/60" style={{ left: `${m}%` }} />
+        ))}
+      </div>
+      <p className="mt-3 text-xs text-muted">
+        {t("dashboard.dtiDetail", { obligations: f.money(dti.obligations, dti.currency), income: f.money(dti.income, dti.currency) })}
+      </p>
+      {dti.excludedLoans > 0 && <p className="mt-1 text-xs text-muted">{t("dashboard.dtiExcluded", { count: dti.excludedLoans })}</p>}
     </Section>
   );
 }
@@ -159,6 +208,25 @@ export function Dashboard() {
         <Tile label={t("dashboard.outstanding")} totals={d.outstanding} />
       </div>
       <p className="mt-2 text-xs text-muted">{t("dashboard.perCurrencyNote")}</p>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-3">
+        <DtiCard dti={d.dti} />
+        {Object.keys(d.balanceTrend).length > 0 && (
+          <Section title={t("charts.balanceTrend")} className="lg:col-span-2">
+            <p className="mb-2 text-xs text-muted">{t("charts.balanceTrendDesc")}</p>
+            <div className="space-y-6">
+              {Object.entries(d.balanceTrend)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([c, pts]) => (
+                  <div key={c}>
+                    {Object.keys(d.balanceTrend).length > 1 && <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">{c}</p>}
+                    <BalanceChart currency={c} label={`${t("charts.balanceTrend")} (${c})`} points={pts.map((p) => ({ date: p.date, value: p.outstanding }))} />
+                  </div>
+                ))}
+            </div>
+          </Section>
+        )}
+      </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <Section title={t("dashboard.upcoming")} className="lg:col-span-2">

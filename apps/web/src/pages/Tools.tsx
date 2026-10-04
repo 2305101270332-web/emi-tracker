@@ -6,6 +6,7 @@ import { COMMON_CURRENCIES } from "@emi/shared";
 import { useFormat } from "../lib/format";
 import { useMe } from "../lib/queries";
 import { PageHeader, Section, SelectField, TextField, Toggle, cx } from "../components/ui";
+import { Payoff } from "./Payoff";
 
 interface QuickState {
   label: string;
@@ -256,19 +257,19 @@ function Compare() {
 
 export function Tools() {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<"calculator" | "compare">("calculator");
+  const [tab, setTab] = useState<"calculator" | "compare" | "payoff">("calculator");
   return (
     <>
       <PageHeader title={t("tools.title")} />
-      <div role="tablist" aria-label={t("tools.title")} className="mb-5 inline-flex rounded-xl border border-line bg-surface p-1">
-        {(["calculator", "compare"] as const).map((v) => (
+      <div role="tablist" aria-label={t("tools.title")} className="mb-5 inline-flex max-w-full overflow-x-auto rounded-xl border border-line bg-surface p-1">
+        {(["calculator", "compare", "payoff"] as const).map((v) => (
           <button
             key={v}
             role="tab"
             id={`tab-${v}`}
             aria-selected={tab === v}
             aria-controls={`panel-${v}`}
-            className={cx("min-h-[40px] rounded-lg px-4 text-sm font-medium", tab === v ? "bg-primary text-primary-on" : "text-muted")}
+            className={cx("min-h-[40px] shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-medium sm:px-4", tab === v ? "bg-primary text-primary-on" : "text-muted")}
             onClick={() => setTab(v)}
           >
             {t(`tools.${v}`)}
@@ -276,7 +277,7 @@ export function Tools() {
         ))}
       </div>
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
-        {tab === "calculator" ? <Calculator /> : <Compare />}
+        {tab === "calculator" ? <Calculator /> : tab === "compare" ? <Compare /> : <Payoff />}
       </div>
     </>
   );

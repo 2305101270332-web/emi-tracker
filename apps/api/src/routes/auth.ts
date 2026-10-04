@@ -10,6 +10,17 @@ import { sendEmail, welcomeEmail } from "../services/email";
 
 export const authRoutes = new Hono<AppEnv>();
 
+/** Attach invites addressed to this verified Google email to the signed-in user. */
+export async function linkPendingShares(db: D1Database, userId: string, email: string): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE loan_shares SET user_id = ?1, accepted_at = COALESCE(accepted_at, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+       WHERE email = lower(?2) AND user_id IS NULL AND owner_id != ?1`,
+    )
+    .bind(userId, email)
+    .run();
+}
+
 /** Create the user (and default settings by request country) on first login; returns user id. */
 export async function upsertUser(c: Context<AppEnv>, g: GoogleIdentity): Promise<{ id: string; created: boolean }> {
   const db = c.env.DB;
@@ -57,6 +68,7 @@ authRoutes.post("/google", rateLimit("auth", 20), async (c) => {
   const { credential } = googleLoginSchema.parse(await c.req.json());
   const g = await verifyGoogleIdToken(credential, c.env.GOOGLE_CLIENT_ID);
   const { id, created } = await upsertUser(c, g);
+  await linkPendingShares(c.env.DB, id, g.email);
   await issueSession(c, id);
   if (created) c.executionCtx.waitUntil(sendWelcome(c, id, g));
   return c.json({ ok: true, created });
@@ -66,6 +78,7 @@ authRoutes.post("/google", rateLimit("auth", 20), async (c) => {
 authRoutes.post("/dev", async (c) => {
   if (c.env.ENVIRONMENT !== "development" && c.env.ENVIRONMENT !== "test") throw new ApiError(404, "not_found");
   const { id } = await upsertUser(c, { sub: "dev-demo-user", email: "demo@example.com", name: "Demo User", picture: null });
+  await linkPendingShares(c.env.DB, id, "demo@example.com");
   await issueSession(c, id);
   return c.json({ ok: true });
 });

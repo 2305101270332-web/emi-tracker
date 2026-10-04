@@ -1,13 +1,14 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Bell, BellOff, Check, Pencil, PencilLine, SkipForward, Trash2, Undo2 } from "lucide-react";
+import { Bell, BellOff, Check, Pencil, PencilLine, SkipForward, Trash2, Undo2, Users } from "lucide-react";
 import { parseMajor, toMajorString } from "@emi/core";
 import type { Instalment, LoanDetail as LoanDetailT } from "@emi/shared";
 import { HttpError } from "../lib/api";
 import { useFormat } from "../lib/format";
 import { useDeleteLoan, useLenders, useLoan, useMuteLoan, useOverride, usePay, useSkip, useUnpay } from "../lib/queries";
-import { Documents, ExportMenu, PrepaySimulator, RateChanges } from "../components/LoanExtras";
+import { BalanceChart, PrincipalInterestChart } from "../components/charts";
+import { Documents, ExportMenu, PrepaySimulator, RateChanges, SharingPanel } from "../components/LoanExtras";
 import { Dialog, ErrorState, LenderAvatar, PageHeader, ProgressBar, Section, Spinner, StatusBadge, TextField, cx } from "../components/ui";
 
 function Stat({ label, value, strong, hint }: { label: string; value: string; strong?: boolean; hint?: string }) {
@@ -112,6 +113,7 @@ function RowActions({ inst, loan, onPay, onOverride }: { inst: Instalment; loan:
   const { t } = useTranslation();
   const unpay = useUnpay();
   const skip = useSkip();
+  if (loan.access === "view") return null;
   const isLast = inst.n === loan.tenureMonths;
   return (
     <div className="flex flex-wrap justify-end gap-1">
@@ -160,7 +162,9 @@ export function LoanDetail() {
   const loan = loanQ.data;
   const s = loan.summary;
   const m = (v: number) => f.money(v, loan.currency);
-  const lender = lenders.data?.find((l) => l.id === loan.lenderId);
+  const lender = loan.lender ?? lenders.data?.find((l) => l.id === loan.lenderId);
+  const isOwner = loan.access === "owner";
+  const canEdit = loan.access !== "view";
   const taxName = loan.taxLabel === "None" ? t("schedule.tax") : loan.taxLabel;
   const showTax = s.totalInterestTax > 0;
   const showFees = loan.instalments.some((i) => i.fees > 0 || i.shiftCost > 0);
@@ -178,19 +182,31 @@ export function LoanDetail() {
         title={loan.nickname}
         actions={
           <>
-            <button className="btn-secondary" onClick={() => mute.mutate({ id: loan.id, muted: !loan.muted })} aria-pressed={loan.muted}>
-              {loan.muted ? <BellOff size={16} aria-hidden /> : <Bell size={16} aria-hidden />}
-              {loan.muted ? t("loans.unmute") : t("loans.mute")}
-            </button>
-            <Link to={`/loans/${loan.id}/edit`} className="btn-secondary">
-              <Pencil size={16} aria-hidden /> {t("common.edit")}
-            </Link>
-            <button className="btn-danger" onClick={() => void onDelete()}>
-              <Trash2 size={16} aria-hidden /> {t("common.delete")}
-            </button>
+            {isOwner && (
+              <button className="btn-secondary" onClick={() => mute.mutate({ id: loan.id, muted: !loan.muted })} aria-pressed={loan.muted}>
+                {loan.muted ? <BellOff size={16} aria-hidden /> : <Bell size={16} aria-hidden />}
+                {loan.muted ? t("loans.unmute") : t("loans.mute")}
+              </button>
+            )}
+            {canEdit && (
+              <Link to={`/loans/${loan.id}/edit`} className="btn-secondary">
+                <Pencil size={16} aria-hidden /> {t("common.edit")}
+              </Link>
+            )}
+            {isOwner && (
+              <button className="btn-danger" onClick={() => void onDelete()}>
+                <Trash2 size={16} aria-hidden /> {t("common.delete")}
+              </button>
+            )}
           </>
         }
       />
+      {!isOwner && (
+        <p role="note" className="card mb-4 flex gap-2 border-primary/30 bg-primary-soft/50 p-3 text-sm">
+          <Users size={18} className="mt-0.5 shrink-0 text-primary-strong" aria-hidden />
+          {loan.access === "view" ? t("loans.viewOnlyNotice", { name: loan.ownerName ?? "" }) : t("loans.editNotice", { name: loan.ownerName ?? "" })}
+        </p>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Section className="lg:col-span-1">
@@ -321,14 +337,33 @@ export function LoanDetail() {
       </Section>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <Section title={t("charts.principalVsInterest")}>
+          <p className="mb-2 text-xs text-muted">{t("charts.principalVsInterestDesc")}</p>
+          <PrincipalInterestChart rows={loan.instalments} currency={loan.currency} />
+        </Section>
+        <Section title={t("charts.balanceTrend")}>
+          <p className="mb-2 text-xs text-muted">{t("charts.balanceTrendDesc")}</p>
+          <BalanceChart
+            currency={loan.currency}
+            points={[{ date: loan.bookingDate, value: loan.instalments[0]?.opening ?? loan.principal }, ...loan.instalments.map((i) => ({ date: i.billedDate, value: i.closing }))]}
+          />
+        </Section>
+      </div>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <PrepaySimulator loan={loan} />
         <div className="space-y-6">
           <ExportMenu loan={loan} lenderName={lender?.name ?? ""} />
-          <Documents loan={loan} />
+          {isOwner && <Documents loan={loan} />}
         </div>
         <div className="lg:col-span-2">
           <RateChanges loan={loan} />
         </div>
+        {isOwner && (
+          <div className="lg:col-span-2">
+            <SharingPanel loan={loan} />
+          </div>
+        )}
       </div>
 
       {loan.notes && (

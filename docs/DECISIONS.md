@@ -20,6 +20,41 @@ changes numbers users see — update the tests in `packages/core/test` alongside
 | **Floating rate change** | Each rate change carries its own mode: *keep EMI, change tenure* (default) or *keep tenure, change EMI*. If the current EMI no longer covers the new month's interest (or tenure would exceed 600 months), that change falls back to *keep tenure*. Applies from the first instalment billed on/after the effective date. |
 | **Comparing offers** | Offers are ranked by effective annual rate (XIRR incl. all charges); total cost of borrowing is shown alongside. |
 
+### Phase 3 decisions (made autonomously 2026-10-04, per instruction; change freely)
+
+**Payoff planner** (`packages/core/src/payoff.ts`; the same list is shown on screen)
+| Topic | Decision |
+|---|---|
+| Inputs | Each own, active, reducing-balance loan's outstanding principal, its *current* rate (from the next unpaid instalment, so rate changes are respected) and current EMI (principal + interest). |
+| Budget | Sum of all current EMIs + the extra amount, held constant: a paid-off loan's EMI rolls over to the next target (classic avalanche/snowball). |
+| Order | Avalanche: highest rate first (tie: smaller balance). Snowball: smallest balance first (tie: higher rate). Fixed at the start. |
+| Interest | Monthly, balance × rate / 12, rounded to minor units; extra money reduces principal the same month. |
+| Not modelled | Prepayment charges, fees, future rate changes, missed payments. Tax on interest is reported separately and paid on top of the budget. |
+| Scope | One currency at a time (never converted or combined). Flat-rate loans excluded with an on-screen note (interest fixed upfront). Loans shared *with* you excluded. Cap 600 months ("never paid off" warning). |
+
+**Debt-to-income**
+| Topic | Decision |
+|---|---|
+| Income | One monthly take-home income + its currency, stored in `settings` (private). |
+| Obligations | For each own active loan in the income currency: its next unpaid instalment's amount payable minus one-off fees / EMI-shift cost. Loans in other currencies are excluded and counted in a note. |
+| Bands | < 30 % healthy, 30–40 % caution, > 40 % high (common lender affordability norms). |
+
+**Sharing**
+| Topic | Decision |
+|---|---|
+| Identity | Invites are addressed to an email (stored lower-cased). Access is granted to whoever signs in with Google using that *verified* email — immediately if they already have an account, otherwise on first sign-in. No invite tokens. |
+| Roles | **view**: read-only everywhere (schedule, charts, client-side exports and simulator only). **edit**: record/undo payments, skip, overrides, edit terms, rate changes. **owner only**: share, change access, revoke, delete the loan, mute reminders, documents. Editors cannot change lender, card or loan type (they can't see the owner's lenders/cards; the server keeps the owner's values). |
+| Privacy | Shared users see only the shared loan: never the owner's other loans, cards (card id is hidden), documents (hidden even on the shared loan), shares list or income. Unknown/unshared loans return 404; forbidden actions on a visible loan return 403. |
+| Where shared loans appear | A "Shared with me" section on Loans and the loan page. Not in the shared user's dashboard totals, calendar, debt-to-income or payoff planner (those describe your own debt). |
+| Reminders | Go to the owner only. |
+| Leaving | Recipients cannot remove themselves (only the owner revokes); deleting their account removes them. |
+| Invite email | Sent once per new share via Resend (counted toward the daily email cap); access changes don't re-send. |
+| Account deletion | Deletes the user's own loans (and every share on them) and removes them from loans shared with them, including pending invites to their email. Others' loans are untouched. The confirmation step lists these counts. |
+
+**Charts**: principal vs interest aggregated per calendar year (stacked bars; prepayments count as principal); outstanding balance per month end (line), projected from the schedule assuming instalments are paid as scheduled. Dashboard trend: own loans, one chart per currency, each ending at its debt-free month. Series colours validated for colour-blind separation in light and dark mode.
+
+**Flat-rate loans**: prepayment simulation and rate changes stay unavailable, with an explanation shown in the UI.
+
 Bank-statement fixtures live in `packages/core/test/statements/`; each must match to the paisa.
 The two current fixtures are **illustrative** (independently computed with Python `Decimal`),
 not real bank documents — add real statements with `_template.statement.ts`.

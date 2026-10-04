@@ -162,6 +162,33 @@ export function welcomeEmail(user: EmailUser, appUrl: string): OutgoingEmail {
   };
 }
 
+export function shareInviteEmail(opts: {
+  to: string;
+  ownerName: string;
+  loanNickname: string;
+  access: "view" | "edit";
+  appUrl: string;
+  locale: string;
+}): OutgoingEmail {
+  const t = createTranslator(opts.locale);
+  const access = opts.access === "edit" ? t("email.shareAccessEdit") : t("email.shareAccessView");
+  const heading = t("email.shareHeading", { owner: opts.ownerName, loan: opts.loanNickname });
+  const body = t("email.shareBody", { access, email: opts.to });
+  const footer = t("email.shareFooter", { owner: opts.ownerName });
+  return {
+    to: opts.to,
+    subject: t("email.shareSubject", { owner: opts.ownerName }),
+    html: layout({
+      heading,
+      bodyHtml: `<p style="margin:0;font-size:15px;line-height:1.6;color:${C.muted}">${esc(body)}</p>`,
+      ctaUrl: opts.appUrl,
+      ctaLabel: t("email.shareCta"),
+      footer,
+    }),
+    text: `${heading}\n\n${body}\n\n${t("email.shareCta")}: ${opts.appUrl}\n\n${footer}\n`,
+  };
+}
+
 export interface DueLine {
   loanNickname: string;
   n: number;

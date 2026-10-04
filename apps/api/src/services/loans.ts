@@ -4,6 +4,7 @@ import {
   buildSchedule,
   compareISO,
   derivePayableDate,
+  dtiBand,
   groupPayables,
   instalmentStatus,
   loanProgress,
@@ -15,7 +16,7 @@ import {
   type RateChangeMode,
   type ScheduleSummary,
 } from "@emi/core";
-import { toLoanTerms, type Card, type Dashboard, type Instalment, type LoanDetail, type LoanInput, type LoanListItem, type UpcomingItem } from "@emi/shared";
+import { toLoanTerms, type Card, type Dashboard, type LenderSnapshot, type LoanAccess, type LoanShare, type Instalment, type LoanDetail, type LoanInput, type LoanListItem, type UpcomingItem } from "@emi/shared";
 import { ApiError, notFound } from "../lib/errors";
 import { chunk } from "../lib/util";
 import { cardFromRow, loanFromRow, sqlLiteral } from "./repo";
@@ -160,6 +161,7 @@ export function instalmentFromRow(r: Row, ctx: StatusCtx): Instalment {
     closing: Number(r.closing),
     overridden: r.override_amount !== null && r.override_amount !== undefined,
     skipped: Number(r.skipped) === 1,
+    annualRate: Number(r.annual_rate),
     status: instalmentStatus(
       { payableDate, paidAt: payment?.paidDate ?? null, skipped: Number(r.skipped) === 1 },
       ctx.today,
@@ -174,13 +176,54 @@ function progressFrom(instalments: Instalment[], summary: ScheduleSummary): Loan
   return { ...p, principalOutstanding: summary.financedPrincipal - p.principalPaid };
 }
 
-export async function getLoanDetail(db: D1Database, userId: string, loanId: string): Promise<LoanDetail> {
-  const [loanRes, instRes, tzRes, rcRes, docRes] = await db.batch([
-    db.prepare("SELECT * FROM loans WHERE id = ? AND user_id = ?").bind(loanId, userId),
-    db.prepare(`${INSTALMENT_SELECT} WHERE i.loan_id = ? AND i.user_id = ? ORDER BY i.n`).bind(loanId, userId),
-    db.prepare(STATUS_CTX_SQL).bind(userId),
-    db.prepare("SELECT id, effective_date, annual_rate, mode FROM rate_changes WHERE loan_id = ? AND user_id = ? ORDER BY effective_date").bind(loanId, userId),
-    db.prepare("SELECT id, filename, content_type, size, created_at FROM documents WHERE loan_id = ? AND user_id = ? ORDER BY created_at DESC").bind(loanId, userId),
+/** Who is looking at a loan. Data always lives under the owner's user_id. */
+export interface Viewer {
+  userId: string;
+  role: LoanAccess;
+  ownerName?: string | null;
+}
+
+function lenderSnapshot(r: Row): LenderSnapshot | null {
+  return r.lender_name ? { name: String(r.lender_name), color: String(r.lender_color), initial: String(r.lender_initial) } : null;
+}
+
+const LOAN_WITH_LENDER = `SELECT l.*, ld.name AS lender_name, ld.color AS lender_color, ld.initial AS lender_initial
+  FROM loans l LEFT JOIN lenders ld ON ld.id = l.lender_id`;
+
+function shareFromRow(r: Row): LoanShare {
+  return {
+    id: String(r.id),
+    email: String(r.email),
+    access: String(r.access) as LoanShare["access"],
+    status: r.user_id ? "active" : "pending",
+    name: r.user_name ? String(r.user_name) : null,
+    createdAt: String(r.created_at),
+  };
+}
+
+/**
+ * Full loan view. `ownerId` scopes every query; `viewer` controls what is revealed:
+ * documents, shares and the owner's card id are owner-only. Status uses the viewer's
+ * own time zone and due window.
+ */
+export async function getLoanDetail(db: D1Database, ownerId: string, loanId: string, viewer?: Viewer): Promise<LoanDetail> {
+  const v: Viewer = viewer ?? { userId: ownerId, role: "owner" };
+  const isOwner = v.role === "owner";
+  const [loanRes, instRes, tzRes, rcRes, docRes, shareRes] = await db.batch([
+    db.prepare(`${LOAN_WITH_LENDER} WHERE l.id = ? AND l.user_id = ?`).bind(loanId, ownerId),
+    db.prepare(`${INSTALMENT_SELECT} WHERE i.loan_id = ? AND i.user_id = ? ORDER BY i.n`).bind(loanId, ownerId),
+    db.prepare(STATUS_CTX_SQL).bind(v.userId),
+    db.prepare("SELECT id, effective_date, annual_rate, mode FROM rate_changes WHERE loan_id = ? AND user_id = ? ORDER BY effective_date").bind(loanId, ownerId),
+    // Owner-only data: the queries match nothing for shared viewers.
+    db
+      .prepare("SELECT id, filename, content_type, size, created_at FROM documents WHERE loan_id = ? AND user_id = ? AND ? = 1 ORDER BY created_at DESC")
+      .bind(loanId, ownerId, isOwner ? 1 : 0),
+    db
+      .prepare(
+        `SELECT s.*, u.name AS user_name FROM loan_shares s LEFT JOIN users u ON u.id = s.user_id
+         WHERE s.loan_id = ? AND s.owner_id = ? AND ? = 1 ORDER BY s.created_at`,
+      )
+      .bind(loanId, ownerId, isOwner ? 1 : 0),
   ]);
   const row = (loanRes!.results as Row[])[0];
   if (!row) throw notFound("loan_not_found");
@@ -189,9 +232,14 @@ export async function getLoanDetail(db: D1Database, userId: string, loanId: stri
   const instalments = (instRes!.results as Row[]).map((r) => instalmentFromRow(r, ctx));
   return {
     ...loan,
+    // The owner's card is never exposed to shared users (payable dates already reflect it).
+    cardId: isOwner ? loan.cardId : null,
     instalments,
     progress: progressFrom(instalments, loan.summary),
     nextInstalment: instalments.find((i) => !i.payment && !i.skipped) ?? null,
+    access: v.role,
+    lender: lenderSnapshot(row),
+    ownerName: isOwner ? null : (v.ownerName ?? null),
     rateChanges: (rcRes!.results as Row[]).map((r) => ({
       id: String(r.id),
       effectiveDate: String(r.effective_date),
@@ -205,32 +253,71 @@ export async function getLoanDetail(db: D1Database, userId: string, loanId: stri
       size: Number(r.size),
       createdAt: String(r.created_at),
     })),
+    shares: (shareRes!.results as Row[]).map(shareFromRow),
   };
 }
 
-export async function listLoans(db: D1Database, userId: string): Promise<LoanListItem[]> {
-  const [loanRes, instRes, tzRes] = await db.batch([
-    db.prepare("SELECT * FROM loans WHERE user_id = ? ORDER BY created_at DESC").bind(userId),
-    db.prepare(`${INSTALMENT_SELECT} WHERE i.user_id = ? ORDER BY i.loan_id, i.n`).bind(userId),
-    db.prepare(STATUS_CTX_SQL).bind(userId),
-  ]);
-  const ctx = statusCtxFromRow((tzRes!.results as Row[])[0]);
+function toListItems(loanRows: Row[], instRows: Row[], ctx: StatusCtx, role: (r: Row) => LoanAccess, isOwner: (r: Row) => boolean): LoanListItem[] {
   const byLoan = new Map<string, Instalment[]>();
-  for (const r of instRes!.results as Row[]) {
+  for (const r of instRows) {
     const i = instalmentFromRow(r, ctx);
     let list = byLoan.get(i.loanId);
     if (!list) byLoan.set(i.loanId, (list = []));
     list.push(i);
   }
-  return (loanRes!.results as Row[]).map((r) => {
+  return loanRows.map((r) => {
     const loan = loanFromRow(r);
     const inst = byLoan.get(loan.id) ?? [];
     return {
       ...loan,
+      cardId: isOwner(r) ? loan.cardId : null,
       progress: progressFrom(inst, loan.summary),
       nextInstalment: inst.find((i) => !i.payment && !i.skipped) ?? null,
+      access: role(r),
+      lender: lenderSnapshot(r),
+      ownerName: isOwner(r) ? null : r.owner_name ? String(r.owner_name) : null,
     };
   });
+}
+
+/** The user's own loans. */
+export async function listLoans(db: D1Database, userId: string): Promise<LoanListItem[]> {
+  const [loanRes, instRes, tzRes] = await db.batch([
+    db.prepare(`${LOAN_WITH_LENDER} WHERE l.user_id = ? ORDER BY l.created_at DESC`).bind(userId),
+    db.prepare(`${INSTALMENT_SELECT} WHERE i.user_id = ? ORDER BY i.loan_id, i.n`).bind(userId),
+    db.prepare(STATUS_CTX_SQL).bind(userId),
+  ]);
+  return toListItems(loanRes!.results as Row[], instRes!.results as Row[], statusCtxFromRow((tzRes!.results as Row[])[0]), () => "owner", () => true);
+}
+
+/** Loans other people shared with the user — only those loans, nothing else of the owner's. */
+export async function listSharedLoans(db: D1Database, userId: string): Promise<LoanListItem[]> {
+  const [loanRes, instRes, tzRes] = await db.batch([
+    db
+      .prepare(
+        `SELECT l.*, ld.name AS lender_name, ld.color AS lender_color, ld.initial AS lender_initial, s.access AS share_access, u.name AS owner_name
+         FROM loan_shares s
+         JOIN loans l ON l.id = s.loan_id AND l.user_id = s.owner_id
+         JOIN users u ON u.id = s.owner_id
+         LEFT JOIN lenders ld ON ld.id = l.lender_id
+         WHERE s.user_id = ? ORDER BY l.created_at DESC`,
+      )
+      .bind(userId),
+    db
+      .prepare(
+        `${INSTALMENT_SELECT} JOIN loan_shares s ON s.loan_id = i.loan_id AND s.owner_id = i.user_id
+         WHERE s.user_id = ? ORDER BY i.loan_id, i.n`,
+      )
+      .bind(userId),
+    db.prepare(STATUS_CTX_SQL).bind(userId),
+  ]);
+  return toListItems(
+    loanRes!.results as Row[],
+    instRes!.results as Row[],
+    statusCtxFromRow((tzRes!.results as Row[])[0]),
+    (r) => String(r.share_access) as LoanAccess,
+    () => false,
+  );
 }
 
 /** Instalments in a payable-date range (calendar / list view), across all loans. */
@@ -277,7 +364,7 @@ export async function getDashboard(db: D1Database, userId: string): Promise<Dash
   const horizon = addDays(today, 30);
   const windowEnd = compareISO(horizon, monthEnd) > 0 ? horizon : monthEnd;
 
-  const [dueRes, loanRes, paidRes] = await db.batch([
+  const [dueRes, loanRes, paidRes, nextRes, trendRes, incomeRes] = await db.batch([
     db
       .prepare(
         `${INSTALMENT_SELECT.replace("SELECT i.*", "SELECT i.*, l.nickname AS loan_nickname, l.lender_id, l.card_id, l.currency")}
@@ -294,6 +381,21 @@ export async function getDashboard(db: D1Database, userId: string): Promise<Dash
          WHERE i.user_id = ? GROUP BY i.loan_id`,
       )
       .bind(userId),
+    // Each loan's next unpaid instalment, excluding one-off fees / EMI-shift cost: the regular monthly obligation.
+    db
+      .prepare(
+        `SELECT i.loan_id, MIN(i.n) AS n, i.total_payable - i.fees - i.shift_cost AS regular
+         FROM instalments i LEFT JOIN payments p ON p.instalment_id = i.id AND p.user_id = i.user_id
+         WHERE i.user_id = ? AND p.id IS NULL AND i.skipped = 0 GROUP BY i.loan_id`,
+      )
+      .bind(userId),
+    db
+      .prepare(
+        `SELECT i.loan_id, i.billed_date, i.closing, l.currency FROM instalments i JOIN loans l ON l.id = i.loan_id AND l.user_id = i.user_id
+         WHERE i.user_id = ? AND i.billed_date >= ? ORDER BY i.loan_id, i.n`,
+      )
+      .bind(userId, monthStart),
+    db.prepare("SELECT monthly_income, income_currency FROM settings WHERE user_id = ?").bind(userId),
   ]);
 
   const items = (dueRes!.results as Row[]).map((r) => toUpcoming(r, ctx));
@@ -315,6 +417,69 @@ export async function getDashboard(db: D1Database, userId: string): Promise<Dash
   });
   const active = loans.filter((l) => l.outstanding > 0);
 
+  // ---- Debt-to-income (income currency only; never mixed with other currencies)
+  const incomeRow = (incomeRes!.results as Row[])[0];
+  let dti: Dashboard["dti"] = null;
+  if (incomeRow && incomeRow.monthly_income !== null && incomeRow.income_currency && Number(incomeRow.monthly_income) > 0) {
+    const income = Number(incomeRow.monthly_income);
+    const currency = String(incomeRow.income_currency);
+    const regular = new Map((nextRes!.results as Row[]).map((r) => [String(r.loan_id), Number(r.regular)]));
+    const loanRows = loanRes!.results as Row[];
+    let obligations = 0;
+    let excludedLoans = 0;
+    for (const r of loanRows) {
+      const out = (JSON.parse(String(r.summary)) as ScheduleSummary).financedPrincipal - (principalPaid.get(String(r.id)) ?? 0);
+      if (out <= 0) continue;
+      if (String(r.currency) !== currency) excludedLoans++;
+      else obligations += regular.get(String(r.id)) ?? 0;
+    }
+    const ratio = obligations / income;
+    dti = { currency, income, obligations, ratio, band: dtiBand(ratio), excludedLoans };
+  }
+
+  // ---- Projected outstanding principal at each month end, per currency (schedule assumed paid)
+  const balanceTrend: Dashboard["balanceTrend"] = {};
+  {
+    const startOutstanding = new Map<string, { currency: string; outstanding: number }>();
+    loans.forEach((l, idx) => startOutstanding.set(String((loanRes!.results as Row[])[idx]!.id), { currency: l.currency, outstanding: Math.max(0, l.outstanding) }));
+    // closing by loan & month (last instalment billed in that month)
+    const closingByLoanMonth = new Map<string, Map<string, number>>();
+    let lastMonth = monthStart.slice(0, 7);
+    for (const r of trendRes!.results as Row[]) {
+      const loanId = String(r.loan_id);
+      const month = String(r.billed_date).slice(0, 7);
+      if (month > lastMonth) lastMonth = month;
+      let m = closingByLoanMonth.get(loanId);
+      if (!m) closingByLoanMonth.set(loanId, (m = new Map()));
+      m.set(month, Number(r.closing));
+    }
+    const months: string[] = [];
+    for (let d = monthStart; d.slice(0, 7) <= lastMonth && months.length < 600; d = addMonthsClamped(d, 1, 1)) months.push(d.slice(0, 7));
+    const current = new Map([...startOutstanding].map(([id, v]) => [id, v.outstanding]));
+    const series: Record<string, number[]> = {};
+    for (const month of months) {
+      for (const [id] of startOutstanding) {
+        const c = closingByLoanMonth.get(id)?.get(month);
+        if (c !== undefined) current.set(id, c);
+      }
+      const totals: Record<string, number> = {};
+      for (const [id, v] of startOutstanding) totals[v.currency] = (totals[v.currency] ?? 0) + Math.max(0, current.get(id) ?? 0);
+      for (const [cur2, total] of Object.entries(totals)) (series[cur2] ??= []).push(total);
+    }
+    // Downsample long horizons to at most ~120 points (keep the first and last).
+    for (const [cur2, values] of Object.entries(series)) {
+      if (!values.some((v) => v > 0)) continue;
+      // End each currency's series at its first zero (its own debt-free month).
+      const firstZero = values.findIndex((v) => v <= 0);
+      const end = firstZero === -1 ? values.length : firstZero + 1;
+      const step = Math.max(1, Math.ceil(end / 120));
+      balanceTrend[cur2] = months
+        .slice(0, end)
+        .map((m, i) => ({ date: `${m}-01`, outstanding: values[i]! }))
+        .filter((_, i) => i % step === 0 || i === end - 1);
+    }
+  }
+
   return {
     today,
     payableThisMonth: totalsByCurrency(inMonth.filter((i) => i.status !== "skipped"), cur, amount),
@@ -330,5 +495,7 @@ export async function getDashboard(db: D1Database, userId: string): Promise<Dash
         .map((i) => ({ ...i, id: i.instalmentId })),
     ).map((g) => ({ ...g, items: g.items as unknown as UpcomingItem[] })),
     activeLoans: active.length,
+    dti,
+    balanceTrend,
   };
 }

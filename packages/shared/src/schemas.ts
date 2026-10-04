@@ -49,6 +49,9 @@ export const settingsSchema = z.object({
   pushEnabled: z.boolean(),
   emailReminders: z.boolean(),
   weeklySummary: z.boolean(),
+  /** Private: never exposed to users a loan is shared with. Minor units of incomeCurrency. */
+  monthlyIncome: nonNegMinor.max(1e14).nullable(),
+  incomeCurrency: currencyCode.nullable(),
 });
 export type Settings = z.infer<typeof settingsSchema>;
 export const settingsPatchSchema = settingsSchema.partial();
@@ -143,6 +146,13 @@ export const prepaymentInputSchema = z.object({
   chargeTaxRate: percent.default(0),
 });
 export type PrepaymentInput = z.infer<typeof prepaymentInputSchema>;
+
+export const shareInputSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(320),
+  access: z.enum(["view", "edit"]),
+});
+export type ShareInput = z.infer<typeof shareInputSchema>;
+export const shareAccessSchema = z.object({ access: z.enum(["view", "edit"]) });
 
 export const deleteAccountSchema = z.object({ confirmEmail: z.string().email().max(320) });
 

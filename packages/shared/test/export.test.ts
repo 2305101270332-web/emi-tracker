@@ -4,7 +4,7 @@ import { duesToIcs, scheduleToCsv, type Instalment, type UpcomingItem } from "..
 const inst = (n: number, over: Partial<Instalment> = {}): Instalment => ({
   id: `L:${n}`, loanId: "L", n, billedDate: "2025-02-05", payableDate: "2025-02-25", opening: 100_000_00, interest: 1_000_00,
   principal: 7_884_88, emi: 8_884_88, interestTax: 180_00, fees: 0, shiftCost: 0, totalPayable: 9_064_88, closing: 92_115_12,
-  overridden: false, skipped: false, status: "upcoming", payment: null, ...over,
+  overridden: false, skipped: false, annualRate: 12, status: "upcoming", payment: null, ...over,
 });
 
 describe("CSV export", () => {
