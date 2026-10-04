@@ -377,10 +377,14 @@ export function Settings() {
           <Toggle label={t("settings.push")} checked={s.pushEnabled} onChange={(v) => void patch({ pushEnabled: v })} />
           {s.pushEnabled && <PushSettings />}
           <h3 className="mb-1 mt-5 text-sm font-semibold text-primary-strong">{t("settings.email")}</h3>
-          <div className="divide-y divide-line">
-            <Toggle label={t("settings.emailReminders")} checked={s.emailReminders} onChange={(v) => void patch({ emailReminders: v })} />
-            <Toggle label={t("settings.weeklySummary")} checked={s.weeklySummary} onChange={(v) => void patch({ weeklySummary: v })} />
-          </div>
+          {me.data.features.email ? (
+            <div className="divide-y divide-line">
+              <Toggle label={t("settings.emailReminders")} checked={s.emailReminders} onChange={(v) => void patch({ emailReminders: v })} />
+              <Toggle label={t("settings.weeklySummary")} checked={s.weeklySummary} onChange={(v) => void patch({ weeklySummary: v })} />
+            </div>
+          ) : (
+            <p className="text-sm text-muted">{t("settings.emailUnavailable")}</p>
+          )}
         </Section>
 
         <Section title={t("settings.lenders")}>

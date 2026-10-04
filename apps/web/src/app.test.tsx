@@ -14,6 +14,7 @@ const me: Me = {
     theme: "light", reminderHour: 9, dueWindowDays: 7, reminderDaysBefore: [3, 1], remindOnDay: true, remindOverdue: true, pushEnabled: true,
     emailReminders: true, weeklySummary: false, monthlyIncome: 2_00_000_00, incomeCurrency: "INR",
   },
+  features: { email: false, push: true },
 };
 
 const item = (id: string, loan: string, amount: number, currency = "INR", cardId: string | null = null) => ({

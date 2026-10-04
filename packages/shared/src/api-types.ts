@@ -11,6 +11,8 @@ export interface User {
 export interface Me {
   user: User;
   settings: Settings;
+  /** Which optional channels the server has configured (email needs Resend; push needs VAPID keys). */
+  features: { email: boolean; push: boolean };
 }
 
 export interface Lender {

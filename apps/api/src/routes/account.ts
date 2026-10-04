@@ -3,6 +3,7 @@ import { deleteAccountSchema, settingsPatchSchema, type DeletionImpact, type Me,
 import { clearSession } from "../lib/auth";
 import type { AppEnv } from "../env";
 import { ApiError, notFound } from "../lib/errors";
+import { emailConfigured } from "../services/email";
 import { SETTINGS_COLUMNS, settingsFromRow, settingsValue } from "../services/repo";
 
 export const accountRoutes = new Hono<AppEnv>();
@@ -18,6 +19,7 @@ accountRoutes.get("/me", async (c) => {
   const me: Me = {
     user: { id: String(row.id), email: String(row.email), name: String(row.name), picture: row.picture ? String(row.picture) : null },
     settings: settingsFromRow(row),
+    features: { email: emailConfigured(c.env), push: !!(c.env.VAPID_PUBLIC_KEY && c.env.VAPID_PRIVATE_KEY) },
   };
   return c.json(me);
 });

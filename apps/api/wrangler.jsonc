@@ -1,62 +1,97 @@
 {
-  "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "emi-tracker-api",
-  "main": "src/index.ts",
-  "compatibility_date": "2025-09-01",
-  "compatibility_flags": ["nodejs_compat"],
-  "observability": { "enabled": true },
-
-  // Hourly reminder job (1 of the 5 cron triggers allowed on the free plan).
-  "triggers": { "crons": ["0 * * * *"] },
-
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "emi_tracker",
-      // Replace with the id printed by: npx wrangler d1 create emi_tracker
-      "database_id": "00000000-0000-0000-0000-000000000000",
-      "migrations_dir": "migrations"
-    }
-  ],
-
-  "r2_buckets": [{ "binding": "DOCS", "bucket_name": "emi-tracker-docs" }],
-
-  // Coarse per-IP limiter for auth endpoints; per-user limits are applied in code.
-  "ratelimits": [
-    { "name": "RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 120, "period": 60 } }
-  ],
-
-  // Non-secret config. Secrets (SESSION_SECRET, VAPID_PRIVATE_KEY, RESEND_API_KEY,
-  // RESEND_FROM, RESEND_WEBHOOK_SECRET) are set with `wrangler secret put`.
-  "vars": {
-    "ENVIRONMENT": "production",
-    "APP_ORIGIN": "https://emi-tracker.pages.dev",
-    "API_ORIGIN": "https://emi-tracker.pages.dev",
-    "GOOGLE_CLIENT_ID": "your-client-id.apps.googleusercontent.com",
-    "VAPID_PUBLIC_KEY": "",
-    "VAPID_SUBJECT": "mailto:admin@example.com",
-    "EMAIL_DAILY_CAP": "95"
-  },
-
-  "env": {
-    "dev": {
-      "vars": {
-        "ENVIRONMENT": "development",
-        "APP_ORIGIN": "http://localhost:5173",
-        "API_ORIGIN": "http://localhost:5173",
-        "GOOGLE_CLIENT_ID": "your-client-id.apps.googleusercontent.com",
-        "VAPID_PUBLIC_KEY": "",
-        "VAPID_SUBJECT": "mailto:admin@example.com",
-        "EMAIL_DAILY_CAP": "95"
-      },
-      "d1_databases": [
-        { "binding": "DB", "database_name": "emi_tracker", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }
-      ],
-      "r2_buckets": [{ "binding": "DOCS", "bucket_name": "emi-tracker-docs" }],
-      "ratelimits": [
-        { "name": "RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 600, "period": 60 } }
-      ],
-      "triggers": { "crons": ["0 * * * *"] }
-    }
-  }
+	"$schema": "../../node_modules/wrangler/config-schema.json",
+	"name": "emi-tracker-api",
+	"main": "src/index.ts",
+	"compatibility_date": "2025-09-01",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"observability": {
+		"enabled": true
+	},
+	// Hourly reminder job (1 of the 5 cron triggers allowed on the free plan).
+	"triggers": {
+		"crons": [
+			"0 * * * *"
+		]
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "emi_tracker",
+			// Replace with the id printed by: npx wrangler d1 create emi_tracker
+			"database_id": "b3ecc4d2-aead-420b-980a-1b9cda92f616",
+			"migrations_dir": "migrations"
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "DOCS",
+			"bucket_name": "emi-tracker-docs"
+		}
+	],
+	// Coarse per-IP limiter for auth endpoints; per-user limits are applied in code.
+	"ratelimits": [
+		{
+			"name": "RATE_LIMITER",
+			"namespace_id": "1001",
+			"simple": {
+				"limit": 120,
+				"period": 60
+			}
+		}
+	],
+	// Non-secret config. Secrets (SESSION_SECRET, VAPID_PRIVATE_KEY, RESEND_API_KEY,
+	// RESEND_FROM, RESEND_WEBHOOK_SECRET) are set with `wrangler secret put`.
+	"vars": {
+		"ENVIRONMENT": "production",
+		"APP_ORIGIN": "https://emi-tracker-au4.pages.dev",
+		"API_ORIGIN": "https://emi-tracker-au4.pages.dev",
+		"GOOGLE_CLIENT_ID": "126769683270-8plsl2794h3qhr4bh1g41n4rr6mkj63s.apps.googleusercontent.com",
+		"VAPID_PUBLIC_KEY": "BEYXtBgmggt5H9lFZbaNWLf65-ysTK15aEYSYG8iDGMaBXelzwGXZq_xETEOlwlWY7ifh5YBAWLfydm5EcIFah0",
+		"VAPID_SUBJECT": "https://emi-tracker-au4.pages.dev",
+		"EMAIL_DAILY_CAP": "95"
+	},
+	"env": {
+		"dev": {
+			"vars": {
+				"ENVIRONMENT": "development",
+				"APP_ORIGIN": "http://localhost:5173",
+				"API_ORIGIN": "http://localhost:5173",
+				"GOOGLE_CLIENT_ID": "126769683270-8plsl2794h3qhr4bh1g41n4rr6mkj63s.apps.googleusercontent.com",
+				"VAPID_PUBLIC_KEY": "BEYXtBgmggt5H9lFZbaNWLf65-ysTK15aEYSYG8iDGMaBXelzwGXZq_xETEOlwlWY7ifh5YBAWLfydm5EcIFah0",
+				"VAPID_SUBJECT": "https://emi-tracker-au4.pages.dev",
+				"EMAIL_DAILY_CAP": "95"
+			},
+			"d1_databases": [
+				{
+					"binding": "DB",
+					"database_name": "emi_tracker",
+					"database_id": "b3ecc4d2-aead-420b-980a-1b9cda92f616",
+					"migrations_dir": "migrations"
+				}
+			],
+			"r2_buckets": [
+				{
+					"binding": "DOCS",
+					"bucket_name": "emi-tracker-docs"
+				}
+			],
+			"ratelimits": [
+				{
+					"name": "RATE_LIMITER",
+					"namespace_id": "1001",
+					"simple": {
+						"limit": 600,
+						"period": 60
+					}
+				}
+			],
+			"triggers": {
+				"crons": [
+					"0 * * * *"
+				]
+			}
+		}
+	}
 }

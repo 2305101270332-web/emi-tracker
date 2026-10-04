@@ -477,6 +477,7 @@ export const en = {
     email: "Email",
     emailReminders: "Email reminders",
     weeklySummary: "Weekly summary of upcoming dues",
+    emailUnavailable: "Email reminders aren't enabled on this server. You'll get push notifications and in-app reminders instead.",
     income: "Income",
     incomeIntro: "Used only for your debt-to-income indicator. It's private: people you share loans with never see it.",
     monthlyIncome: "Monthly take-home income",

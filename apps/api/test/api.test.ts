@@ -40,6 +40,7 @@ describe("auth & ownership", () => {
     const me = await c.get("/me");
     expect(me.json.user.email).toBe("demo@example.com");
     expect(me.json.settings).toMatchObject({ country: "IN", currency: "INR", taxLabel: "GST", taxRate: 18 });
+    expect(me.json.features).toEqual({ email: false, push: false }); // no Resend/VAPID in the test env
   });
 
   it("dev login is disabled in production", async () => {
