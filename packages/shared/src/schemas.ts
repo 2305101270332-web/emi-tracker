@@ -41,6 +41,8 @@ export const settingsSchema = z.object({
   taxRate: percent,
   theme: z.enum(["system", "light", "dark"]),
   reminderHour: z.number().int().min(0).max(23),
+  /** An unpaid instalment shows as "due" from this many days before its payable date. */
+  dueWindowDays: z.number().int().min(0).max(30),
   reminderDaysBefore: z.array(z.number().int().min(1).max(30)).max(5),
   remindOnDay: z.boolean(),
   remindOverdue: z.boolean(),
@@ -125,6 +127,24 @@ export type LoanInput = z.infer<typeof loanInputSchema>;
 export type LoanInputRaw = z.input<typeof loanInputSchema>;
 
 export const overrideSchema = z.object({ amount: nonNegMinor.nullable() });
+
+export const rateChangeInputSchema = z.object({
+  effectiveDate: isoDate,
+  annualRate: percent,
+  mode: z.enum(["keep_emi", "keep_tenure"]).default("keep_emi"),
+});
+export type RateChangeInput = z.infer<typeof rateChangeInputSchema>;
+
+export const prepaymentInputSchema = z.object({
+  date: isoDate,
+  amount: minor.positive(),
+  mode: z.enum(["reduce_tenure", "reduce_emi"]),
+  chargePercent: percent.default(0),
+  chargeTaxRate: percent.default(0),
+});
+export type PrepaymentInput = z.infer<typeof prepaymentInputSchema>;
+
+export const deleteAccountSchema = z.object({ confirmEmail: z.string().email().max(320) });
 
 // ---- Payments ---------------------------------------------------------------------------
 export const paymentInputSchema = z.object({

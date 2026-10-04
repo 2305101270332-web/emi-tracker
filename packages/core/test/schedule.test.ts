@@ -19,7 +19,7 @@ function checkInvariants(s: Schedule) {
     expect(Number.isSafeInteger(r.interest)).toBe(true);
     expect(Number.isSafeInteger(r.principal)).toBe(true);
     expect(r.emi).toBe(r.principal + r.interest);
-    expect(r.closing).toBe(r.opening - r.principal);
+    expect(r.closing).toBe(r.opening - r.principal - r.prepayment);
     expect(r.totalPayable).toBe(
       r.emi + r.interestTax + r.processingFee + r.processingFeeTax + r.shiftInterest + r.shiftTax,
     );
@@ -27,6 +27,7 @@ function checkInvariants(s: Schedule) {
   }
   expect(rows.at(-1)!.closing).toBe(0);
   expect(s.summary.totalPrincipal).toBe(s.summary.financedPrincipal);
+  expect(s.summary.instalments).toBe(rows.length);
 }
 
 describe("reducing balance", () => {
@@ -279,12 +280,84 @@ describe("manual overrides", () => {
 });
 
 describe("rate changes", () => {
-  it("recomputes EMI from the effective date keeping tenure", () => {
-    const s = buildSchedule({ ...base, rateChanges: [{ effectiveDate: "2025-07-01", annualRate: 14 }] });
+  it("keep tenure: recomputes EMI from the effective date", () => {
+    const s = buildSchedule({ ...base, rateChanges: [{ effectiveDate: "2025-07-01", annualRate: 14, mode: "keep_tenure" }] });
     checkInvariants(s);
+    expect(s.rows).toHaveLength(12);
     expect(s.rows[4]!.annualRate).toBe(12); // 2025-06-05
     expect(s.rows[5]!.annualRate).toBe(14); // 2025-07-05
     expect(s.rows[5]!.emi).toBeGreaterThan(s.rows[4]!.emi);
+  });
+  it("keep EMI (default): a rate rise extends the tenure, EMI unchanged", () => {
+    const s = buildSchedule({ ...base, principal: 2_000_000_00, annualRate: 8.5, tenureMonths: 120, rateChanges: [{ effectiveDate: "2026-01-01", annualRate: 9.5 }] });
+    checkInvariants(s);
+    expect(s.rows.length).toBeGreaterThan(120);
+    const emis = new Set(s.rows.slice(0, -1).map((r) => r.emi));
+    expect(emis.size).toBe(1);
+  });
+  it("keep EMI: a rate cut shortens the tenure", () => {
+    const s = buildSchedule({ ...base, principal: 2_000_000_00, annualRate: 9.5, tenureMonths: 120, rateChanges: [{ effectiveDate: "2026-01-01", annualRate: 8, mode: "keep_emi" }] });
+    checkInvariants(s);
+    expect(s.rows.length).toBeLessThan(120);
+  });
+  it("keep EMI falls back to keep tenure when the EMI no longer covers interest", () => {
+    // 50 lakh @ 8.5% x 240: EMI 43,391.16 covers interest only while the rate stays below ~10.4%.
+    const s = buildSchedule({ ...base, principal: 5_000_000_00, annualRate: 8.5, tenureMonths: 240, rateChanges: [{ effectiveDate: "2025-03-01", annualRate: 11 }] });
+    checkInvariants(s);
+    expect(s.rows).toHaveLength(240);
+    expect(s.rows[1]!.emi).toBeGreaterThan(s.rows[0]!.emi);
+  });
+  it("applies several changes in date order", () => {
+    const s = buildSchedule({
+      ...base,
+      rateChanges: [
+        { effectiveDate: "2025-09-01", annualRate: 11, mode: "keep_tenure" },
+        { effectiveDate: "2025-05-01", annualRate: 13, mode: "keep_tenure" },
+      ],
+    });
+    checkInvariants(s);
+    expect(s.rows.map((r) => r.annualRate)).toEqual([12, 12, 12, 13, 13, 13, 13, 11, 11, 11, 11, 11]);
+  });
+});
+
+describe("prepayments", () => {
+  // Expected figures from an independent Python Decimal reference (see docs/DECISIONS.md).
+  it("reduce tenure: EMI unchanged, loan ends sooner", () => {
+    const s = buildSchedule({ ...base, prepayments: [{ date: "2025-04-05", amount: 20_000_00, mode: "reduce_tenure" }] });
+    checkInvariants(s);
+    expect(s.rows).toHaveLength(10);
+    expect(s.rows[2]!.prepayment).toBe(20_000_00);
+    expect(s.rows[3]).toMatchObject({ interest: 561_08, principal: 8_323_80, closing: 47_784_22, emi: 8_884_88 });
+    expect(s.rows[9]).toMatchObject({ interest: 49_00, principal: 4_899_87, closing: 0 });
+    expect(s.summary.totalInterest).toBe(4_912_79);
+    expect(s.summary.totalPrepaid).toBe(20_000_00);
+  });
+  it("reduce EMI: tenure unchanged, EMI recomputed", () => {
+    const s = buildSchedule({ ...base, prepayments: [{ date: "2025-04-05", amount: 20_000_00, mode: "reduce_emi" }] });
+    checkInvariants(s);
+    expect(s.rows).toHaveLength(12);
+    expect(s.rows[3]).toMatchObject({ interest: 561_08, principal: 5_988_99, emi: 6_550_07, closing: 50_119_03 });
+    expect(s.rows[11]).toMatchObject({ interest: 64_85, principal: 6_485_22, closing: 0 });
+    expect(s.summary.totalInterest).toBe(5_605_27);
+  });
+  it("a payment between EMI dates is applied after the next EMI", () => {
+    const s = buildSchedule({ ...base, prepayments: [{ date: "2025-03-20", amount: 20_000_00, mode: "reduce_tenure" }] });
+    expect(s.rows[1]!.prepayment).toBe(0); // EMI 2 on 2025-03-05
+    expect(s.rows[2]!.prepayment).toBe(20_000_00); // applied after EMI 3 on 2025-04-05
+  });
+  it("foreclosure: closes the loan, charge on amount prepaid plus GST", () => {
+    const s = buildSchedule({ ...base, prepayments: [{ date: "2025-06-05", amount: 1_000_000_00, mode: "reduce_tenure", chargePercent: 4, chargeTaxRate: 18 }] });
+    checkInvariants(s);
+    expect(s.rows).toHaveLength(5);
+    const last = s.rows[4]!;
+    const outstanding = last.opening - last.principal;
+    expect(last.prepayment).toBe(outstanding);
+    expect(last.prepaymentCharge).toBe(Math.round(outstanding * 0.04));
+    expect(last.prepaymentChargeTax).toBe(Math.round(last.prepaymentCharge * 0.18));
+    expect(s.summary.totalCostOfBorrowing).toBe(s.summary.totalInterest + last.prepaymentCharge + last.prepaymentChargeTax);
+  });
+  it("rejects prepayments on flat-rate loans", () => {
+    expect(() => buildSchedule({ ...base, repaymentType: "flat", prepayments: [{ date: "2025-04-05", amount: 1, mode: "reduce_emi" }] })).toThrow(ScheduleError);
   });
 });
 

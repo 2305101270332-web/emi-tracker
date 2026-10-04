@@ -7,6 +7,7 @@ import type { Instalment, LoanDetail as LoanDetailT } from "@emi/shared";
 import { HttpError } from "../lib/api";
 import { useFormat } from "../lib/format";
 import { useDeleteLoan, useLenders, useLoan, useMuteLoan, useOverride, usePay, useSkip, useUnpay } from "../lib/queries";
+import { Documents, ExportMenu, PrepaySimulator, RateChanges } from "../components/LoanExtras";
 import { Dialog, ErrorState, LenderAvatar, PageHeader, ProgressBar, Section, Spinner, StatusBadge, TextField, cx } from "../components/ui";
 
 function Stat({ label, value, strong, hint }: { label: string; value: string; strong?: boolean; hint?: string }) {
@@ -318,6 +319,17 @@ export function LoanDetail() {
           ))}
         </ul>
       </Section>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <PrepaySimulator loan={loan} />
+        <div className="space-y-6">
+          <ExportMenu loan={loan} lenderName={lender?.name ?? ""} />
+          <Documents loan={loan} />
+        </div>
+        <div className="lg:col-span-2">
+          <RateChanges loan={loan} />
+        </div>
+      </div>
 
       {loan.notes && (
         <Section title={t("form.notes")} className="mt-6">

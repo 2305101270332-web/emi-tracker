@@ -24,9 +24,31 @@ export interface EmiShiftSpec {
   collection?: ChargeCollection;
 }
 
+export type RateChangeMode = "keep_emi" | "keep_tenure";
+
 export interface RateChange {
   effectiveDate: ISODate;
   annualRate: number;
+  /**
+   * keep_emi (default): EMI unchanged, tenure grows/shrinks.
+   * keep_tenure: tenure unchanged, EMI recomputed.
+   * keep_emi falls back to keep_tenure if the EMI no longer covers the interest.
+   */
+  mode?: RateChangeMode;
+}
+
+export type PrepaymentMode = "reduce_tenure" | "reduce_emi";
+
+export interface Prepayment {
+  /** Applied right after the first instalment billed on/after this date. */
+  date: ISODate;
+  /** Amount prepaid in minor units; capped at the outstanding principal (foreclosure). */
+  amount: Minor;
+  mode: PrepaymentMode;
+  /** Charge as % of the amount prepaid (part-payment / foreclosure charge). */
+  chargePercent?: number;
+  /** Tax on the charge in percent (e.g. GST 18). */
+  chargeTaxRate?: number;
 }
 
 export interface LoanTerms {
@@ -56,8 +78,10 @@ export interface LoanTerms {
   noCostEmi?: boolean;
   /** Manual EMI (principal + interest) per instalment number, 1-based. The last instalment cannot be overridden. */
   overrides?: Readonly<Record<number, Minor>>;
-  /** Floating-rate changes (reducing balance only). Tenure is kept; EMI is recomputed. */
+  /** Floating-rate changes (reducing balance only), each with its own keep-EMI / keep-tenure mode. */
   rateChanges?: readonly RateChange[];
+  /** Part-prepayments / foreclosure (reducing balance only). */
+  prepayments?: readonly Prepayment[];
 }
 
 export interface ScheduleRow {
@@ -74,8 +98,13 @@ export interface ScheduleRow {
   processingFeeTax: Minor;
   shiftInterest: Minor;
   shiftTax: Minor;
-  /** Everything due for this instalment. */
+  /** Everything due for this instalment (excludes any prepayment). */
   totalPayable: Minor;
+  /** Principal prepaid right after this instalment. */
+  prepayment: Minor;
+  prepaymentCharge: Minor;
+  prepaymentChargeTax: Minor;
+  /** opening - principal - prepayment */
   closing: Minor;
   overridden: boolean;
 }
@@ -100,9 +129,14 @@ export interface ScheduleSummary {
   shiftCost: Minor;
   /** Charges paid at booking (fees / shift cost collected upfront). */
   upfrontCharges: Minor;
-  /** Interest - discount + interest tax + fees + fee tax + shift cost. */
+  totalPrepaid: Minor;
+  prepaymentCharges: Minor;
+  prepaymentChargeTax: Minor;
+  /** Number of instalments actually scheduled (changes with prepayments / keep-EMI rate changes). */
+  instalments: number;
+  /** Interest - discount + interest tax + fees + fee tax + shift cost + prepayment charges + their tax. */
   totalCostOfBorrowing: Minor;
-  /** Everything the borrower pays, instalments plus upfront charges. */
+  /** Everything the borrower pays: instalments, upfront charges, prepayments and their charges. */
   totalPayable: Minor;
   /** Flat loans: the equivalent reducing-balance annual rate (percent). Reducing: the contract rate. */
   equivalentReducingRate: number;
@@ -178,6 +212,25 @@ function validate(t: LoanTerms): void {
     if (!(rc.annualRate >= 0 && rc.annualRate <= 100)) fail("rateChange", "Rate change must be 0-100%");
   }
   if (t.rateChanges?.length && t.repaymentType === "flat") fail("rateChange", "Rate changes apply to reducing-balance loans only");
+  for (const p of t.prepayments ?? []) {
+    if (!isValidISODate(p.date)) fail("prepayment", "Invalid prepayment date");
+    assertMinor(p.amount, "prepayment");
+    if (p.amount <= 0) fail("prepayment", "Prepayment amount must be positive");
+    for (const r of [p.chargePercent, p.chargeTaxRate]) {
+      if (r !== undefined && !(r >= 0 && r <= 100)) fail("prepayment", "Prepayment charge and tax must be 0-100%");
+    }
+  }
+  if (t.prepayments?.length && t.repaymentType === "flat") fail("prepayment", "Prepayments are supported for reducing-balance loans only");
+}
+
+/** Months needed to repay `balance` with payment `emi` at monthly rate r; Infinity if the EMI doesn't cover interest. */
+export function monthsToRepay(balance: number, r: number, emi: number): number {
+  if (balance <= 0) return 0;
+  if (emi <= 0) return Infinity;
+  if (r === 0) return Math.ceil(balance / emi - 1e-9);
+  const x = 1 - (balance * r) / emi;
+  if (x <= 0) return Infinity;
+  return Math.max(1, Math.ceil(-Math.log(x) / Math.log(1 + r) - 1e-9));
 }
 
 /** Billed date of instalment n (1-based). */
@@ -187,13 +240,6 @@ export function instalmentDate(t: Pick<LoanTerms, "firstEmiDate" | "emiDay">, n:
   return addMonthsClamped(t.firstEmiDate, n - 1, day);
 }
 
-function rateForDate(t: LoanTerms, date: ISODate): number {
-  let rate = t.annualRate;
-  const changes = [...(t.rateChanges ?? [])].sort((a, b) => compareISO(a.effectiveDate, b.effectiveDate));
-  for (const c of changes) if (compareISO(c.effectiveDate, date) <= 0) rate = c.annualRate;
-  return rate;
-}
-
 interface CoreRow {
   opening: Minor;
   interest: Minor;
@@ -201,40 +247,59 @@ interface CoreRow {
   closing: Minor;
   overridden: boolean;
   annualRate: number;
+  prepayment: Minor;
+  prepaymentCharge: Minor;
+  prepaymentChargeTax: Minor;
 }
 
-function reducingRows(t: LoanTerms, financed: Minor, dates: ISODate[], noCostTotal: Minor | null): CoreRow[] {
-  const n = t.tenureMonths;
-  const overrides = t.overrides ?? {};
-  const hasOverrides = Object.keys(overrides).length > 0;
-  const rows: CoreRow[] = [];
-  let balance = financed;
-  let rate = rateForDate(t, dates[0]!);
-  let r = rate / 1200;
-  let emi = noCostTotal !== null ? roundMinor(noCostTotal / n) : roundMinor(annuityPayment(financed, r, n));
-  let paidSoFar = 0;
+const noPrepay = { prepayment: 0, prepaymentCharge: 0, prepaymentChargeTax: 0 };
 
-  for (let i = 1; i <= n; i++) {
+function reducingRows(t: LoanTerms, financed: Minor, noCostTotal: Minor | null): CoreRow[] {
+  const overrides = t.overrides ?? {};
+  const simple = !Object.keys(overrides).length && !t.rateChanges?.length && !t.prepayments?.length;
+  const changes = [...(t.rateChanges ?? [])].sort((a, b) => compareISO(a.effectiveDate, b.effectiveDate));
+  const prepays = [...(t.prepayments ?? [])].sort((a, b) => compareISO(a.date, b.date));
+  let changeIdx = 0;
+  let prepayIdx = 0;
+
+  // Rate changes effective on/before the first instalment simply set the starting rate.
+  let rate = t.annualRate;
+  const firstDate = instalmentDate(t, 1);
+  while (changeIdx < changes.length && compareISO(changes[changeIdx]!.effectiveDate, firstDate) <= 0) rate = changes[changeIdx++]!.annualRate;
+  let r = rate / 1200;
+
+  // Total instalments; changes with keep-EMI rate changes and reduce-tenure prepayments.
+  let planned = t.tenureMonths;
+  let emi = noCostTotal !== null ? roundMinor(noCostTotal / planned) : roundMinor(annuityPayment(financed, r, planned));
+  let balance = financed;
+  let paidSoFar = 0;
+  const rows: CoreRow[] = [];
+
+  for (let i = 1; i <= MAX_TENURE; i++) {
     const opening = balance;
-    const newRate = rateForDate(t, dates[i - 1]!);
-    if (newRate !== rate) {
-      rate = newRate;
+    const billed = instalmentDate(t, i);
+
+    // Floating-rate changes effective on/before this instalment.
+    while (changeIdx < changes.length && compareISO(changes[changeIdx]!.effectiveDate, billed) <= 0) {
+      const c = changes[changeIdx++]!;
+      rate = c.annualRate;
       r = rate / 1200;
-      emi = roundMinor(annuityPayment(opening, r, n - i + 1));
+      const k = (c.mode ?? "keep_emi") === "keep_emi" ? monthsToRepay(opening, r, emi) : Infinity;
+      if (Number.isFinite(k) && i - 1 + k <= MAX_TENURE) planned = i - 1 + k;
+      else emi = roundMinor(annuityPayment(opening, r, planned - i + 1));
     }
+
     let interest = roundMinor(opening * r);
+    const isLast = i >= planned;
     let principal: Minor;
     let overridden = false;
 
-    if (i === n) {
+    if (isLast) {
       principal = opening;
       // No-cost EMI: force instalments to total the product price exactly, so discount == total interest.
-      if (noCostTotal !== null && !hasOverrides && !t.rateChanges?.length) {
-        interest = noCostTotal - paidSoFar - opening;
-      }
+      if (noCostTotal !== null && simple) interest = noCostTotal - paidSoFar - opening;
     } else if (overrides[i] !== undefined) {
-      const pay = overrides[i]!;
-      principal = pay - interest;
+      principal = overrides[i]! - interest;
       overridden = true;
       if (principal > opening) {
         throw new ScheduleError(
@@ -246,13 +311,38 @@ function reducingRows(t: LoanTerms, financed: Minor, dates: ISODate[], noCostTot
       principal = Math.min(emi - interest, opening);
     }
 
-    const closing = opening - principal;
-    rows.push({ opening, interest, principal, closing, overridden, annualRate: rate });
+    let closing = opening - principal;
     paidSoFar += principal + interest;
-    balance = closing;
 
+    // Prepayments dated on/before this instalment are applied right after it.
+    let prepayment = 0;
+    let prepaymentCharge = 0;
+    let prepaymentChargeTax = 0;
+    let prepayMode: PrepaymentMode | null = null;
+    while (prepayIdx < prepays.length && compareISO(prepays[prepayIdx]!.date, billed) <= 0) {
+      const p = prepays[prepayIdx++]!;
+      const amt = Math.min(p.amount, closing - prepayment);
+      if (amt <= 0) continue;
+      const charge = percentOf(amt, p.chargePercent ?? 0);
+      prepayment += amt;
+      prepaymentCharge += charge;
+      prepaymentChargeTax += percentOf(charge, p.chargeTaxRate ?? 0);
+      prepayMode = p.mode;
+    }
+    closing -= prepayment;
+
+    rows.push({ opening, interest, principal, closing, overridden, annualRate: rate, prepayment, prepaymentCharge, prepaymentChargeTax });
+    balance = closing;
+    if (closing <= 0 || isLast) break;
+
+    if (prepayMode === "reduce_emi") {
+      emi = roundMinor(annuityPayment(closing, r, planned - i));
+    } else if (prepayMode === "reduce_tenure") {
+      const k = monthsToRepay(closing, r, emi);
+      if (Number.isFinite(k)) planned = Math.min(planned, i + k);
+    }
     // Keep tenure: after an override the remaining instalments get a fresh EMI.
-    if (overridden) emi = roundMinor(annuityPayment(closing, r, n - i));
+    if (overridden) emi = roundMinor(annuityPayment(closing, r, planned - i));
   }
   return rows;
 }
@@ -280,7 +370,7 @@ function flatRows(t: LoanTerms, financed: Minor, totalInterest: Minor): CoreRow[
       principal = principalPlan[i - 1]!;
     }
     const closing = opening - principal;
-    rows.push({ opening, interest, principal, closing, overridden, annualRate: t.annualRate });
+    rows.push({ opening, interest, principal, closing, overridden, annualRate: t.annualRate, ...noPrepay });
     balance = closing;
     if (overridden) {
       // Spread the remaining principal evenly across the remaining instalments.
@@ -294,7 +384,6 @@ export function buildSchedule(terms: LoanTerms): Schedule {
   validate(terms);
   const t = terms;
   const n = t.tenureMonths;
-  const dates = Array.from({ length: n }, (_, i) => instalmentDate(t, i + 1));
   const r0 = t.annualRate / 1200;
   const taxRate = t.interestTaxRate ?? 0;
 
@@ -317,7 +406,7 @@ export function buildSchedule(terms: LoanTerms): Schedule {
   }
 
   const core =
-    t.repaymentType === "flat" ? flatRows(t, financed, flatInterest) : reducingRows(t, financed, dates, noCostTotal);
+    t.repaymentType === "flat" ? flatRows(t, financed, flatInterest) : reducingRows(t, financed, noCostTotal);
 
   // --- Charges --------------------------------------------------------------------------------
   const fee = t.processingFee ?? { kind: "none" };
@@ -352,7 +441,7 @@ export function buildSchedule(terms: LoanTerms): Schedule {
     const emi = c.principal + c.interest;
     return {
       n: idx + 1,
-      billedDate: dates[idx]!,
+      billedDate: instalmentDate(t, idx + 1),
       annualRate: c.annualRate,
       opening: c.opening,
       interest: c.interest,
@@ -364,6 +453,9 @@ export function buildSchedule(terms: LoanTerms): Schedule {
       shiftInterest: rowShift,
       shiftTax: rowShiftTax,
       totalPayable: emi + interestTax + rowFee + rowFeeTax + rowShift + rowShiftTax,
+      prepayment: c.prepayment,
+      prepaymentCharge: c.prepaymentCharge,
+      prepaymentChargeTax: c.prepaymentChargeTax,
       closing: c.closing,
       overridden: c.overridden,
     };
@@ -376,8 +468,13 @@ export function buildSchedule(terms: LoanTerms): Schedule {
   const totalFees = processingFee + processingFeeTax;
   const shiftCost = shiftInterest + shiftTax;
   const upfrontCharges = (feeUpfront ? totalFees : 0) + (shiftUpfront ? shiftCost : 0);
-  const totalPayable = sum(rows.map((x) => x.totalPayable)) + upfrontCharges;
-  const totalCostOfBorrowing = totalInterest - noCostDiscount + totalInterestTax + totalFees + shiftCost;
+  const totalPrepaid = sum(rows.map((x) => x.prepayment));
+  const prepaymentCharges = sum(rows.map((x) => x.prepaymentCharge));
+  const prepaymentChargeTax = sum(rows.map((x) => x.prepaymentChargeTax));
+  const totalPayable =
+    sum(rows.map((x) => x.totalPayable)) + upfrontCharges + totalPrepaid + prepaymentCharges + prepaymentChargeTax;
+  const totalCostOfBorrowing =
+    totalInterest - noCostDiscount + totalInterestTax + totalFees + shiftCost + prepaymentCharges + prepaymentChargeTax;
 
   let equivalentReducingRate = t.annualRate;
   if (t.repaymentType === "flat" && flatInterest > 0) {
@@ -387,7 +484,9 @@ export function buildSchedule(terms: LoanTerms): Schedule {
   // Borrower receives the principal (the product, for no-cost EMI) at booking, pays upfront
   // charges at booking, then every instalment on its billed date.
   const flows: CashFlow[] = [{ date: t.bookingDate, amount: t.principal - upfrontCharges }];
-  for (const row of rows) flows.push({ date: row.billedDate, amount: -row.totalPayable });
+  for (const row of rows) {
+    flows.push({ date: row.billedDate, amount: -(row.totalPayable + row.prepayment + row.prepaymentCharge + row.prepaymentChargeTax) });
+  }
   const eff = totalCostOfBorrowing === 0 ? 0 : xirr(flows);
 
   return {
@@ -396,7 +495,7 @@ export function buildSchedule(terms: LoanTerms): Schedule {
       currency: t.currency,
       emi: rows[0]!.emi,
       financedPrincipal: financed,
-      totalPrincipal: sum(rows.map((x) => x.principal)),
+      totalPrincipal: sum(rows.map((x) => x.principal + x.prepayment)),
       totalInterest,
       totalInterestTax,
       noCostDiscount,
@@ -408,6 +507,10 @@ export function buildSchedule(terms: LoanTerms): Schedule {
       shiftTax,
       shiftCost,
       upfrontCharges,
+      totalPrepaid,
+      prepaymentCharges,
+      prepaymentChargeTax,
+      instalments: rows.length,
       totalCostOfBorrowing,
       totalPayable,
       equivalentReducingRate,

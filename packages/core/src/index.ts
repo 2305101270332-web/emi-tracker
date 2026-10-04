@@ -4,3 +4,4 @@ export * from "./irr";
 export * from "./schedule";
 export * from "./payable";
 export * from "./tracking";
+export * from "./simulate";

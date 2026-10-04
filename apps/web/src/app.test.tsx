@@ -11,7 +11,7 @@ const me: Me = {
   user: { id: "u", email: "a@b.c", name: "Asha Rao", picture: null },
   settings: {
     country: "IN", currency: "INR", locale: "en-IN", timeZone: "Asia/Kolkata", dateFormat: "DD/MM/YYYY", taxLabel: "GST", taxRate: 18,
-    theme: "light", reminderHour: 9, reminderDaysBefore: [3, 1], remindOnDay: true, remindOverdue: true, pushEnabled: true,
+    theme: "light", reminderHour: 9, dueWindowDays: 7, reminderDaysBefore: [3, 1], remindOnDay: true, remindOverdue: true, pushEnabled: true,
     emailReminders: true, weeklySummary: false,
   },
 };

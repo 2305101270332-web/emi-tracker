@@ -11,6 +11,7 @@ import type {
   LoanListItem,
   Me,
   PaymentInput,
+  RateChangeInput,
   Settings,
   UpcomingItem,
 } from "@emi/shared";
@@ -137,3 +138,29 @@ export function useSaveSettings() {
 }
 
 export const useMarkAllRead = () => useApiMutation(() => api("/notifications/read-all", { method: "POST" }), () => [keys.notifications]);
+
+// ---- Phase 2 -----------------------------------------------------------------------------
+
+export const useAddRateChange = () =>
+  useLoanDetailMutation(({ loanId, input }: { loanId: string; input: RateChangeInput }) =>
+    api<LoanDetail>(`/loans/${loanId}/rate-changes`, { method: "POST", body: input }),
+  );
+export const useDeleteRateChange = () =>
+  useLoanDetailMutation(({ loanId, id }: { loanId: string; id: string }) => api<LoanDetail>(`/loans/${loanId}/rate-changes/${id}`, { method: "DELETE" }));
+
+/** Raw-body upload (no multipart) — the Worker sniffs the type and streams to R2. */
+export const useUploadDocument = () =>
+  useLoanDetailMutation(async ({ loanId, file }: { loanId: string; file: File }) => {
+    const res = await fetch(`${(import.meta.env.VITE_API_BASE as string | undefined) ?? ""}/api/loans/${loanId}/documents?filename=${encodeURIComponent(file.name)}`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      body: file,
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) throw new HttpError(res.status, json);
+    return json as LoanDetail;
+  });
+export const useDeleteDocument = () => useLoanDetailMutation((id: string) => api<LoanDetail>(`/documents/${id}`, { method: "DELETE" }));
+
+export const useDeleteAccount = () => useMutation({ mutationFn: (confirmEmail: string) => api<void>("/account", { method: "DELETE", body: { confirmEmail } }) });

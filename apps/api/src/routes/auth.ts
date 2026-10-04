@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import { countryDefaults, googleLoginSchema } from "@emi/shared";
 import type { AppEnv } from "../env";
-import { clearSession, issueSession, requireAuth, verifyGoogleIdToken, type GoogleIdentity } from "../lib/auth";
+import { clearSession, issueSession, requireAuth, revokeAllSessions, verifyGoogleIdToken, type GoogleIdentity } from "../lib/auth";
 import { seedDemo } from "../services/demo";
 import { ApiError } from "../lib/errors";
 import { rateLimit } from "../lib/security";
@@ -76,7 +76,14 @@ authRoutes.post("/dev/seed", requireAuth, async (c) => {
   return c.json({ created: await seedDemo(c.env.DB, c.get("userId")) });
 });
 
+/** Sign out of this device only. */
 authRoutes.post("/logout", async (c) => {
   clearSession(c);
+  return c.json({ ok: true });
+});
+
+/** Sign out of all devices: bumps the user's session version so every issued cookie is rejected. */
+authRoutes.post("/logout-all", requireAuth, async (c) => {
+  await revokeAllSessions(c, c.get("userId"));
   return c.json({ ok: true });
 });

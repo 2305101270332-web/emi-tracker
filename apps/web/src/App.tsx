@@ -12,6 +12,7 @@ import { Loans } from "./pages/Loans";
 import { Login } from "./pages/Login";
 import { Notifications } from "./pages/Notifications";
 import { Settings } from "./pages/Settings";
+import { Tools } from "./pages/Tools";
 
 export function AppRoutes() {
   const me = useMe();
@@ -30,6 +31,7 @@ export function AppRoutes() {
         <Route path="loans/:id/edit" element={<LoanForm />} />
         <Route path="calendar" element={<Calendar />} />
         <Route path="cards" element={<Cards />} />
+        <Route path="tools" element={<Tools />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -12,6 +12,7 @@ import {
   totalsByKeyAndCurrency,
   type LoanProgress,
   type PayableRule,
+  type RateChangeMode,
   type ScheduleSummary,
 } from "@emi/core";
 import { toLoanTerms, type Card, type Dashboard, type Instalment, type LoanDetail, type LoanInput, type LoanListItem, type UpcomingItem } from "@emi/shared";
@@ -21,9 +22,23 @@ import { cardFromRow, loanFromRow, sqlLiteral } from "./repo";
 
 type Row = Record<string, unknown>;
 
-export async function userToday(db: D1Database, userId: string): Promise<string> {
-  const s = await db.prepare("SELECT time_zone FROM settings WHERE user_id = ?").bind(userId).first<{ time_zone: string }>();
-  return todayInZone(s?.time_zone ?? "UTC");
+/** What status derivation needs: the user's local date and their "due" window. */
+export interface StatusCtx {
+  today: string;
+  dueWindowDays: number;
+}
+
+const STATUS_CTX_SQL = "SELECT time_zone, due_window_days FROM settings WHERE user_id = ?";
+
+function statusCtxFromRow(r: Row | undefined): StatusCtx {
+  return {
+    today: todayInZone(String(r?.time_zone ?? "UTC")),
+    dueWindowDays: r?.due_window_days === undefined || r?.due_window_days === null ? 7 : Number(r.due_window_days),
+  };
+}
+
+export async function userStatusCtx(db: D1Database, userId: string): Promise<StatusCtx> {
+  return statusCtxFromRow((await db.prepare(STATUS_CTX_SQL).bind(userId).first<Row>()) ?? undefined);
 }
 
 export async function loadCard(db: D1Database, userId: string, cardId: string | null | undefined): Promise<Card | null> {
@@ -47,7 +62,7 @@ export async function regenerateSchedule(
 ): Promise<ScheduleSummary> {
   const [ov, rc] = await db.batch([
     db.prepare("SELECT n, override_amount FROM instalments WHERE loan_id = ? AND user_id = ? AND override_amount IS NOT NULL").bind(loanId, userId),
-    db.prepare("SELECT effective_date, annual_rate FROM rate_changes WHERE loan_id = ? AND user_id = ?").bind(loanId, userId),
+    db.prepare("SELECT effective_date, annual_rate, mode FROM rate_changes WHERE loan_id = ? AND user_id = ?").bind(loanId, userId),
   ]);
   const overrides: Record<number, number> = {};
   for (const r of (ov!.results as Row[]) ?? []) {
@@ -57,6 +72,7 @@ export async function regenerateSchedule(
   const rateChanges = ((rc!.results as Row[]) ?? []).map((r) => ({
     effectiveDate: String(r.effective_date),
     annualRate: Number(r.annual_rate),
+    mode: String(r.mode) as RateChangeMode,
   }));
 
   const schedule = buildSchedule(toLoanTerms(input, { overrides, rateChanges }));
@@ -103,8 +119,9 @@ export async function regenerateSchedule(
     );
   }
   statements.push(
-    db.prepare("DELETE FROM payments WHERE loan_id = ? AND user_id = ? AND instalment_id IN (SELECT id FROM instalments WHERE loan_id = ? AND n > ?)").bind(loanId, userId, loanId, input.tenureMonths),
-    db.prepare("DELETE FROM instalments WHERE loan_id = ? AND user_id = ? AND n > ?").bind(loanId, userId, input.tenureMonths),
+    // Schedule length can differ from the contract tenure (keep-EMI rate changes), so trim by actual rows.
+    db.prepare("DELETE FROM payments WHERE loan_id = ? AND user_id = ? AND instalment_id IN (SELECT id FROM instalments WHERE loan_id = ? AND n > ?)").bind(loanId, userId, loanId, schedule.rows.length),
+    db.prepare("DELETE FROM instalments WHERE loan_id = ? AND user_id = ? AND n > ?").bind(loanId, userId, schedule.rows.length),
     db.prepare("UPDATE loans SET summary = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND user_id = ?").bind(JSON.stringify(schedule.summary), loanId, userId),
   );
   await db.batch(statements);
@@ -115,7 +132,7 @@ const INSTALMENT_SELECT = `
   SELECT i.*, p.id AS payment_id, p.paid_date, p.amount_paid, p.late_fee, p.note AS payment_note
   FROM instalments i LEFT JOIN payments p ON p.instalment_id = i.id AND p.user_id = i.user_id`;
 
-export function instalmentFromRow(r: Row, today: string): Instalment {
+export function instalmentFromRow(r: Row, ctx: StatusCtx): Instalment {
   const payment = r.payment_id
     ? {
         id: String(r.payment_id),
@@ -143,7 +160,11 @@ export function instalmentFromRow(r: Row, today: string): Instalment {
     closing: Number(r.closing),
     overridden: r.override_amount !== null && r.override_amount !== undefined,
     skipped: Number(r.skipped) === 1,
-    status: instalmentStatus({ payableDate, paidAt: payment?.paidDate ?? null, skipped: Number(r.skipped) === 1 }, today),
+    status: instalmentStatus(
+      { payableDate, paidAt: payment?.paidDate ?? null, skipped: Number(r.skipped) === 1 },
+      ctx.today,
+      ctx.dueWindowDays,
+    ),
     payment,
   };
 }
@@ -154,21 +175,36 @@ function progressFrom(instalments: Instalment[], summary: ScheduleSummary): Loan
 }
 
 export async function getLoanDetail(db: D1Database, userId: string, loanId: string): Promise<LoanDetail> {
-  const [loanRes, instRes, tzRes] = await db.batch([
+  const [loanRes, instRes, tzRes, rcRes, docRes] = await db.batch([
     db.prepare("SELECT * FROM loans WHERE id = ? AND user_id = ?").bind(loanId, userId),
     db.prepare(`${INSTALMENT_SELECT} WHERE i.loan_id = ? AND i.user_id = ? ORDER BY i.n`).bind(loanId, userId),
-    db.prepare("SELECT time_zone FROM settings WHERE user_id = ?").bind(userId),
+    db.prepare(STATUS_CTX_SQL).bind(userId),
+    db.prepare("SELECT id, effective_date, annual_rate, mode FROM rate_changes WHERE loan_id = ? AND user_id = ? ORDER BY effective_date").bind(loanId, userId),
+    db.prepare("SELECT id, filename, content_type, size, created_at FROM documents WHERE loan_id = ? AND user_id = ? ORDER BY created_at DESC").bind(loanId, userId),
   ]);
   const row = (loanRes!.results as Row[])[0];
   if (!row) throw notFound("loan_not_found");
-  const today = todayInZone(String((tzRes!.results as Row[])[0]?.time_zone ?? "UTC"));
+  const ctx = statusCtxFromRow((tzRes!.results as Row[])[0]);
   const loan = loanFromRow(row);
-  const instalments = (instRes!.results as Row[]).map((r) => instalmentFromRow(r, today));
+  const instalments = (instRes!.results as Row[]).map((r) => instalmentFromRow(r, ctx));
   return {
     ...loan,
     instalments,
     progress: progressFrom(instalments, loan.summary),
     nextInstalment: instalments.find((i) => !i.payment && !i.skipped) ?? null,
+    rateChanges: (rcRes!.results as Row[]).map((r) => ({
+      id: String(r.id),
+      effectiveDate: String(r.effective_date),
+      annualRate: Number(r.annual_rate),
+      mode: String(r.mode) as RateChangeMode,
+    })),
+    documents: (docRes!.results as Row[]).map((r) => ({
+      id: String(r.id),
+      filename: String(r.filename),
+      contentType: String(r.content_type),
+      size: Number(r.size),
+      createdAt: String(r.created_at),
+    })),
   };
 }
 
@@ -176,12 +212,12 @@ export async function listLoans(db: D1Database, userId: string): Promise<LoanLis
   const [loanRes, instRes, tzRes] = await db.batch([
     db.prepare("SELECT * FROM loans WHERE user_id = ? ORDER BY created_at DESC").bind(userId),
     db.prepare(`${INSTALMENT_SELECT} WHERE i.user_id = ? ORDER BY i.loan_id, i.n`).bind(userId),
-    db.prepare("SELECT time_zone FROM settings WHERE user_id = ?").bind(userId),
+    db.prepare(STATUS_CTX_SQL).bind(userId),
   ]);
-  const today = todayInZone(String((tzRes!.results as Row[])[0]?.time_zone ?? "UTC"));
+  const ctx = statusCtxFromRow((tzRes!.results as Row[])[0]);
   const byLoan = new Map<string, Instalment[]>();
   for (const r of instRes!.results as Row[]) {
-    const i = instalmentFromRow(r, today);
+    const i = instalmentFromRow(r, ctx);
     let list = byLoan.get(i.loanId);
     if (!list) byLoan.set(i.loanId, (list = []));
     list.push(i);
@@ -204,7 +240,7 @@ export async function listInstalmentsInRange(
   from: string,
   to: string,
 ): Promise<UpcomingItem[]> {
-  const today = await userToday(db, userId);
+  const ctx = await userStatusCtx(db, userId);
   const res = await db
     .prepare(
       `${INSTALMENT_SELECT.replace("SELECT i.*", "SELECT i.*, l.nickname AS loan_nickname, l.lender_id, l.card_id, l.currency")}
@@ -213,11 +249,11 @@ export async function listInstalmentsInRange(
     )
     .bind(userId, from, to)
     .all<Row>();
-  return res.results.map((r) => toUpcoming(r, today));
+  return res.results.map((r) => toUpcoming(r, ctx));
 }
 
-function toUpcoming(r: Row, today: string): UpcomingItem {
-  const i = instalmentFromRow(r, today);
+function toUpcoming(r: Row, ctx: StatusCtx): UpcomingItem {
+  const i = instalmentFromRow(r, ctx);
   return {
     instalmentId: i.id,
     loanId: i.loanId,
@@ -234,7 +270,8 @@ function toUpcoming(r: Row, today: string): UpcomingItem {
 }
 
 export async function getDashboard(db: D1Database, userId: string): Promise<Dashboard> {
-  const today = await userToday(db, userId);
+  const ctx = await userStatusCtx(db, userId);
+  const today = ctx.today;
   const monthStart = today.slice(0, 8) + "01";
   const monthEnd = addDays(addMonthsClamped(monthStart, 1), -1);
   const horizon = addDays(today, 30);
@@ -259,7 +296,7 @@ export async function getDashboard(db: D1Database, userId: string): Promise<Dash
       .bind(userId),
   ]);
 
-  const items = (dueRes!.results as Row[]).map((r) => toUpcoming(r, today));
+  const items = (dueRes!.results as Row[]).map((r) => toUpcoming(r, ctx));
   const unpaid = items.filter((i) => i.status !== "paid" && i.status !== "skipped");
   const inMonth = items.filter((i) => i.payableDate >= monthStart && i.payableDate <= monthEnd);
   const amount = (i: UpcomingItem) => i.amount;

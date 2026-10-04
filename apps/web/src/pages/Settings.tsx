@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
-import { LogOut, Trash2 } from "lucide-react";
+import { Download, LogOut, MonitorSmartphone, Trash2, UserX } from "lucide-react";
 import { COMMON_CURRENCIES, COUNTRIES, DATE_FORMATS, TAX_LABELS, countryDefaults, type Settings as SettingsT } from "@emi/shared";
 import { api } from "../lib/api";
-import { useDeleteLender, useLenders, useMe, useSaveSettings } from "../lib/queries";
+import { useDeleteAccount, useDeleteLender, useLenders, useMe, useSaveSettings } from "../lib/queries";
+import { HttpError } from "../lib/api";
 import { getPushState, subscribePush, unsubscribePush, type PushState } from "../lib/pwa";
 import { applyTheme } from "../lib/theme";
-import { ErrorState, LenderAvatar, PageHeader, Section, SelectField, Spinner, TextField, Toggle } from "../components/ui";
+import { Dialog, ErrorState, LenderAvatar, PageHeader, Section, SelectField, Spinner, TextField, Toggle } from "../components/ui";
 
 const timeZones = (): string[] => {
   try {
@@ -66,6 +67,55 @@ function PushSettings() {
   );
 }
 
+function DataSection({ email, onDeleted }: { email: string; onDeleted: () => void }) {
+  const { t } = useTranslation();
+  const del = useDeleteAccount();
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const base = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
+  return (
+    <Section title={t("data.title")}>
+      <a className="btn-secondary" href={`${base}/api/account/export`} download>
+        <Download size={16} aria-hidden /> {t("data.export")}
+      </a>
+      <p className="hint">{t("data.exportHint")}</p>
+      <div className="mt-5 border-t border-line pt-4">
+        <button className="btn-danger" onClick={() => setOpen(true)}>
+          <UserX size={16} aria-hidden /> {t("data.delete")}
+        </button>
+        <p className="hint">{t("data.deleteHint")}</p>
+      </div>
+      <Dialog open={open} onClose={() => setOpen(false)} title={t("data.deleteConfirmTitle")}>
+        <form
+          className="space-y-4"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setError(null);
+            try {
+              await del.mutateAsync(typed);
+              onDeleted();
+            } catch (ex) {
+              setError(ex instanceof HttpError && ex.status === 422 ? t("data.emailMismatch") : t("common.errorGeneric"));
+            }
+          }}
+        >
+          <p className="text-sm text-muted">{t("data.deleteHint")}</p>
+          <TextField label={t("data.deleteConfirmLabel")} hint={t("data.deleteConfirmBody", { email })} type="email" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" required />
+          {error && (
+            <p role="alert" className="text-sm text-danger">
+              {error}
+            </p>
+          )}
+          <button className="btn-danger w-full" disabled={del.isPending || typed.trim().toLowerCase() !== email.toLowerCase()}>
+            {t("data.deleteAction")}
+          </button>
+        </form>
+      </Dialog>
+    </Section>
+  );
+}
+
 export function Settings() {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -87,8 +137,9 @@ export function Settings() {
     setStatus(t("settings.saved"));
   };
 
-  const signOut = async () => {
-    await api("/auth/logout", { method: "POST" }).catch(() => undefined);
+  const signOut = async (everywhere = false) => {
+    if (everywhere && !confirm(t("common.signOutAllConfirm"))) return;
+    await api(everywhere ? "/auth/logout-all" : "/auth/logout", { method: "POST" }).catch(() => undefined);
     navigator.serviceWorker?.controller?.postMessage({ type: "CLEAR_API_CACHE" });
     qc.clear();
     qc.setQueryData(["me"], null);
@@ -101,9 +152,14 @@ export function Settings() {
       <PageHeader
         title={t("settings.title")}
         actions={
-          <button className="btn-secondary" onClick={() => void signOut()}>
-            <LogOut size={16} aria-hidden /> {t("common.signOut")}
-          </button>
+          <>
+            <button className="btn-secondary" onClick={() => void signOut()}>
+              <LogOut size={16} aria-hidden /> {t("common.signOut")}
+            </button>
+            <button className="btn-danger" onClick={() => void signOut(true)}>
+              <MonitorSmartphone size={16} aria-hidden /> {t("common.signOutAll")}
+            </button>
+          </>
         }
       />
       <p role="status" aria-live="polite" className="sr-only">
@@ -208,6 +264,19 @@ export function Settings() {
               </option>
             ))}
           </SelectField>
+          <SelectField
+            label={t("settings.dueWindow")}
+            hint={t("settings.dueWindowHint")}
+            value={String(s.dueWindowDays)}
+            onChange={(e) => void patch({ dueWindowDays: Number(e.target.value) })}
+            className="mt-4"
+          >
+            {[...new Set([0, 1, 2, 3, 5, 7, 10, 14, 21, 30, s.dueWindowDays])].sort((a, b) => a - b).map((d) => (
+              <option key={d} value={d}>
+                {d === 0 ? t("settings.dueWindowSameDay") : t("settings.dueWindowDays", { count: d })}
+              </option>
+            ))}
+          </SelectField>
           <fieldset className="mt-4">
             <legend className="label">{t("settings.reminderDaysBefore")}</legend>
             <div className="flex flex-wrap gap-2">
@@ -259,6 +328,15 @@ export function Settings() {
           </ul>
           {delLender.error && <p role="alert" className="text-sm text-danger">{(delLender.error as Error).message}</p>}
         </Section>
+
+        <DataSection
+          email={me.data.user.email}
+          onDeleted={() => {
+            navigator.serviceWorker?.controller?.postMessage({ type: "CLEAR_API_CACHE" });
+            qc.clear();
+            qc.setQueryData(["me"], null);
+          }}
+        />
       </div>
     </>
   );

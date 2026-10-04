@@ -53,6 +53,31 @@ describe("auth & ownership", () => {
     expect((await c.get("/me")).status).toBe(401);
   });
 
+  it("sign out of all devices revokes every session; per-device sign out does not", async () => {
+    const phone = client(env);
+    await phone.post("/auth/dev");
+    const laptop = client(env);
+    await laptop.post("/auth/dev");
+    expect((await laptop.get("/me")).status).toBe(200);
+
+    // Per-device sign-out: only the phone's cookie is cleared
+    await phone.post("/auth/logout");
+    expect((await laptop.get("/me")).status).toBe(200);
+
+    await phone.post("/auth/dev");
+    const res = await phone.post("/auth/logout-all");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("set-cookie")).toMatch(/emi_session=;/);
+    const revoked = await laptop.get("/me");
+    expect(revoked.status).toBe(401);
+    expect(revoked.json.error).toBe("session_revoked");
+
+    // Signing in again issues a cookie with the new version
+    const again = client(env);
+    await again.post("/auth/dev");
+    expect((await again.get("/me")).status).toBe(200);
+  });
+
   it("isolates every resource by user", async () => {
     const a = client(env);
     a.setCookie(await createUser(env, "alice"));
@@ -207,6 +232,17 @@ describe("loans", () => {
     const lenders = await c.get("/lenders");
     expect(lenders.json.some((x: any) => x.id === l.json.id && x.custom)).toBe(true);
     expect(lenders.json.filter((x: any) => x.country === "IN").length).toBeGreaterThan(9);
+  });
+
+  it("uses the user's due window for instalment status", async () => {
+    const today = todayInZone("Asia/Kolkata");
+    const in5 = addDays(today, 5);
+    const created = await c.post("/loans", loan({ bookingDate: addMonthsClamped(in5, -1), firstEmiDate: in5, emiDay: Number(in5.slice(8)) }));
+    expect(created.json.instalments[0].status).toBe("due"); // default 7 days
+    await c.patch("/settings", { dueWindowDays: 3 });
+    expect((await c.get(`/loans/${created.json.id}`)).json.instalments[0].status).toBe("upcoming");
+    expect((await c.patch("/settings", { dueWindowDays: 31 })).status).toBe(400);
+    expect((await c.get("/me")).json.settings.dueWindowDays).toBe(3);
   });
 
   it("updates settings with validation", async () => {

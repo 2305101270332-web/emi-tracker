@@ -11,6 +11,19 @@ changes numbers users see — update the tests in `packages/core/test` alongside
 | **Manual override** | Overrides set an instalment's EMI (principal + interest, excluding tax/fees). Tenure is kept: the remaining instalments get a recomputed EMI on the new balance. The last instalment cannot be overridden (it always closes the loan). Overrides above balance + interest are rejected (use a prepayment instead). Overrides below the interest are allowed (negative amortisation). |
 | **APR / IRR** | Both are shown. XIRR is solved on actual dates (borrower receives principal minus upfront charges at booking, pays each instalment's total on its billed date). *Effective annual rate* = XIRR; *nominal APR* = `((1 + XIRR)^(1/12) − 1) × 12`. |
 
+### Phase 2 decisions (confirmed 2026-10-04)
+
+| Topic | Decision |
+|---|---|
+| **Prepayment timing** | A part-payment is applied immediately after the next EMI on/after its date (a payment on an EMI date applies right after that EMI). No broken-period interest split. |
+| **Prepayment / foreclosure charge** | Charge % × the amount prepaid (for foreclosure that is the whole outstanding principal), plus tax on the charge (e.g. GST 18%). Charges are part of total cost of borrowing. |
+| **Floating rate change** | Each rate change carries its own mode: *keep EMI, change tenure* (default) or *keep tenure, change EMI*. If the current EMI no longer covers the new month's interest (or tenure would exceed 600 months), that change falls back to *keep tenure*. Applies from the first instalment billed on/after the effective date. |
+| **Comparing offers** | Offers are ranked by effective annual rate (XIRR incl. all charges); total cost of borrowing is shown alongside. |
+
+Bank-statement fixtures live in `packages/core/test/statements/`; each must match to the paisa.
+The two current fixtures are **illustrative** (independently computed with Python `Decimal`),
+not real bank documents — add real statements with `_template.statement.ts`.
+
 ## Other engine conventions (not product decisions, but worth knowing)
 
 - Money is integer minor units (ISO 4217 digits via `Intl`); rounding is half away from zero.

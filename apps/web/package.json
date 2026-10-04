@@ -17,15 +17,17 @@
     "@emi/shared": "*",
     "@tanstack/react-query": "^5.62.7",
     "i18next": "^24.1.0",
+    "jspdf": "^2.5.2",
+    "jspdf-autotable": "^3.8.4",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-i18next": "^15.2.0",
     "react-router-dom": "^6.28.0",
+    "workbox-expiration": "^7.3.0",
     "workbox-precaching": "^7.3.0",
     "workbox-routing": "^7.3.0",
     "workbox-strategies": "^7.3.0",
-    "workbox-expiration": "^7.3.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

@@ -3,7 +3,7 @@ import type { Minor } from "./money";
 
 export type InstalmentStatus = "upcoming" | "due" | "paid" | "overdue" | "skipped";
 
-/** Days before payable_date at which an unpaid instalment becomes "due". */
+/** Default days before payable_date at which an unpaid instalment becomes "due" (user-configurable). */
 export const DUE_WINDOW_DAYS = 7;
 
 export interface StatusInput {
@@ -12,11 +12,11 @@ export interface StatusInput {
   skipped?: boolean;
 }
 
-export function instalmentStatus(i: StatusInput, today: ISODate): InstalmentStatus {
+export function instalmentStatus(i: StatusInput, today: ISODate, dueWindowDays: number = DUE_WINDOW_DAYS): InstalmentStatus {
   if (i.paidAt) return "paid";
   if (i.skipped) return "skipped";
   if (compareISO(i.payableDate, today) < 0) return "overdue";
-  if (compareISO(i.payableDate, addDays(today, DUE_WINDOW_DAYS)) <= 0) return "due";
+  if (compareISO(i.payableDate, addDays(today, dueWindowDays)) <= 0) return "due";
   return "upcoming";
 }
 

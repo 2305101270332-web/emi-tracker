@@ -73,8 +73,25 @@ export interface LoanListItem extends Loan {
   nextInstalment: Instalment | null;
 }
 
+export interface RateChangeRecord {
+  id: string;
+  effectiveDate: string;
+  annualRate: number;
+  mode: "keep_emi" | "keep_tenure";
+}
+
+export interface LoanDocument {
+  id: string;
+  filename: string;
+  contentType: string;
+  size: number;
+  createdAt: string;
+}
+
 export interface LoanDetail extends LoanListItem {
   instalments: Instalment[];
+  rateChanges: RateChangeRecord[];
+  documents: LoanDocument[];
 }
 
 export type MoneyByCurrency = Record<string, number>;

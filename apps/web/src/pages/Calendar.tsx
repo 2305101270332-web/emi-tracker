@@ -1,16 +1,29 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarPlus, ChevronLeft, ChevronRight } from "lucide-react";
 import { addDays, addMonthsClamped, dayOfWeek, daysInMonth, parseISODate } from "@emi/core";
-import type { UpcomingItem } from "@emi/shared";
+import { duesToIcs, type UpcomingItem } from "@emi/shared";
+import { api } from "../lib/api";
+import { downloadBlob } from "../lib/download";
 import { currencyEntries, useFormat } from "../lib/format";
 import { useInstalments } from "../lib/queries";
 import { ErrorState, PageHeader, Section, Spinner, StatusBadge, cx } from "../components/ui";
 
 export function Calendar() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const f = useFormat();
+  const [exporting, setExporting] = useState(false);
+  const exportIcs = async () => {
+    setExporting(true);
+    try {
+      const from = f.today();
+      const items = await api<UpcomingItem[]>(`/instalments?from=${from}&to=${addMonthsClamped(from, 24)}`);
+      downloadBlob("emi-due-dates.ics", duesToIcs(items, { locale: f.locale, language: i18n.language, alarmDaysBefore: 1 }), "text/calendar;charset=utf-8");
+    } finally {
+      setExporting(false);
+    }
+  };
   const [month, setMonth] = useState(() => f.today().slice(0, 8) + "01");
   const [view, setView] = useState<"month" | "list">(() => (typeof window !== "undefined" && window.innerWidth < 640 ? "list" : "month"));
   const { y, m } = parseISODate(month);
@@ -46,6 +59,10 @@ export function Calendar() {
       <PageHeader
         title={t("calendar.title")}
         actions={
+          <>
+          <button className="btn-secondary" onClick={() => void exportIcs()} disabled={exporting}>
+            <CalendarPlus size={16} aria-hidden /> {t("exporting.icsAll")}
+          </button>
           <div role="group" aria-label={t("calendar.title")} className="inline-flex rounded-xl border border-line bg-surface p-1">
             {(["month", "list"] as const).map((v) => (
               <button
@@ -58,6 +75,7 @@ export function Calendar() {
               </button>
             ))}
           </div>
+          </>
         }
       />
       <Section>

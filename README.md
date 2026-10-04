@@ -15,6 +15,22 @@ packages/shared  Zod schemas, constants, lenders, i18n strings, formatters
 docs/DECISIONS.md  Financial calculation decisions
 ```
 
+## Features
+
+**Phase 1** — Google sign-in; loans with lender, type, currency, fees, tax on interest, EMI shift,
+no-cost EMI; full amortisation schedule with billed vs payable dates (credit-card statement
+cycle, weekend rule); mark paid / skip / edit an instalment to match the bank statement;
+dashboard per currency; calendar; push, email and in-app reminders; installable offline PWA.
+
+**Phase 2** — prepayment / foreclosure simulator (reduce tenure or EMI, charge + tax, net
+saving); floating-rate changes per loan (keep EMI or keep tenure); standalone EMI calculator
+and 2–3 offer comparison ranked by effective annual rate; export schedule to CSV and PDF and
+due dates to `.ics`; loan documents in R2 (PDF/PNG/JPEG/WebP, 10 MB each, 100 MB per user,
+type checked by file signature); full JSON data export and account deletion.
+
+Account: per-device sign-out and **sign out of all devices** (session version bump); the
+"Due" window (days before the pay-by date) is a user setting, default 7.
+
 ## Local development
 
 Requirements: Node 22+ (Node 24 recommended; API tests use the built-in `node:sqlite`).
@@ -36,6 +52,14 @@ card incl. a no-cost EMI and an EMI shift, and a USD BNPL). The dev login only e
 `npm run db:seed:local -w @emi/api` does the same against a running local API.
 
 Trigger the hourly reminder job locally: `npm run cron:test -w @emi/api`.
+
+### Bank-statement checks
+
+`packages/core/test/statements/` holds fixtures that must reproduce a lender's printed
+figures to the paisa (EMI, every listed row, GST, fees, EMI-shift cost). Copy
+`_template.statement.ts`, fill it from your sanction letter / statement and run
+`npm test -w @emi/core`. The two current fixtures are illustrative (computed independently
+in Python `Decimal`), not real bank documents.
 
 ### Tests
 

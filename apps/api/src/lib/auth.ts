@@ -46,8 +46,10 @@ function sessionKey(env: Env): Uint8Array {
   return utf8(env.SESSION_SECRET);
 }
 
+/** Issue a session cookie stamped with the user's current session_version. */
 export async function issueSession(c: Context<AppEnv>, userId: string): Promise<void> {
-  const token = await new SignJWT({})
+  const row = await c.env.DB.prepare("SELECT session_version FROM users WHERE id = ?").bind(userId).first<{ session_version: number }>();
+  const token = await new SignJWT({ sv: Number(row?.session_version ?? 0) })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(userId)
     .setIssuedAt()
@@ -67,21 +69,37 @@ export function clearSession(c: Context<AppEnv>): void {
   deleteCookie(c, SESSION_COOKIE, { path: "/", secure: true, httpOnly: true, sameSite: "Lax" });
 }
 
-export async function readSession(c: Context<AppEnv>): Promise<string | null> {
+export async function readSession(c: Context<AppEnv>): Promise<{ userId: string; version: number } | null> {
   const token = getCookie(c, SESSION_COOKIE);
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, sessionKey(c.env), { audience: "emi-session", algorithms: ["HS256"] });
-    return payload.sub ?? null;
+    if (!payload.sub) return null;
+    return { userId: payload.sub, version: typeof payload.sv === "number" ? payload.sv : 0 };
   } catch {
     return null;
   }
 }
 
-/** Require a valid session; sets c.var.userId. Every data route sits behind this. */
+/**
+ * Require a valid session; sets c.var.userId. Every data route sits behind this.
+ * One indexed primary-key read per request checks the cookie's version against
+ * users.session_version, so "sign out of all devices" takes effect immediately.
+ */
 export const requireAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
-  const userId = await readSession(c);
-  if (!userId) throw new ApiError(401, "unauthenticated");
-  c.set("userId", userId);
+  const session = await readSession(c);
+  if (!session) throw new ApiError(401, "unauthenticated");
+  const row = await c.env.DB.prepare("SELECT session_version FROM users WHERE id = ?").bind(session.userId).first<{ session_version: number }>();
+  if (!row || Number(row.session_version) !== session.version) {
+    clearSession(c);
+    throw new ApiError(401, "session_revoked");
+  }
+  c.set("userId", session.userId);
   await next();
 };
+
+/** Invalidate every session for the user (all devices), including the current one. */
+export async function revokeAllSessions(c: Context<AppEnv>, userId: string): Promise<void> {
+  await c.env.DB.prepare("UPDATE users SET session_version = session_version + 1 WHERE id = ?").bind(userId).run();
+  clearSession(c);
+}

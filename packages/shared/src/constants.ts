@@ -107,8 +107,9 @@ export const SEED_LENDERS: readonly SeedLender[] = [
   { name: "MUFG", country: "JP", color: "#E60012" },
 ];
 
-/** Upload limits for R2 documents (Phase 2). */
+/** Upload limits for R2 documents. Per-user quota keeps the account well inside R2's 10 GB free tier. */
 export const DOCUMENT_MAX_BYTES = 10 * 1024 * 1024;
+export const DOCUMENT_USER_QUOTA_BYTES = 100 * 1024 * 1024;
 export const DOCUMENT_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/webp"] as const;
 
 /** Default reminder offsets (days before payable date). */

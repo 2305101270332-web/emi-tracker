@@ -62,6 +62,14 @@ describe("tracking", () => {
     expect(instalmentStatus({ payableDate: "2025-03-17" }, today)).toBe("due");
     expect(instalmentStatus({ payableDate: "2025-03-18" }, today)).toBe("upcoming");
   });
+  it("uses a configurable due window", () => {
+    const today = "2025-03-10";
+    expect(instalmentStatus({ payableDate: "2025-03-13" }, today, 3)).toBe("due");
+    expect(instalmentStatus({ payableDate: "2025-03-14" }, today, 3)).toBe("upcoming");
+    // 0 = only the payable date itself is "due"
+    expect(instalmentStatus({ payableDate: "2025-03-10" }, today, 0)).toBe("due");
+    expect(instalmentStatus({ payableDate: "2025-03-11" }, today, 0)).toBe("upcoming");
+  });
   it("computes loan progress", () => {
     const p = loanProgress([
       { opening: 1000, principal: 400, interest: 10, closing: 600, paid: true },

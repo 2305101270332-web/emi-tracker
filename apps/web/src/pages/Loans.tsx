@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { BellOff, Plus } from "lucide-react";
+import { BellOff, CreditCard, Plus } from "lucide-react";
 import { useFormat } from "../lib/format";
 import { useLenders, useLoans } from "../lib/queries";
 import { ErrorState, LenderAvatar, PageHeader, ProgressBar, Spinner } from "../components/ui";
@@ -13,9 +13,14 @@ export function Loans() {
   const lender = (id: string) => lenders.data?.find((l) => l.id === id);
 
   const add = (
-    <Link to="/loans/new" className="btn-primary">
-      <Plus size={18} aria-hidden /> {t("loans.add")}
-    </Link>
+    <>
+      <Link to="/cards" className="btn-secondary">
+        <CreditCard size={18} aria-hidden /> {t("nav.cards")}
+      </Link>
+      <Link to="/loans/new" className="btn-primary">
+        <Plus size={18} aria-hidden /> {t("loans.add")}
+      </Link>
+    </>
   );
   if (loans.isLoading) return <Spinner />;
   if (loans.error) return <ErrorState error={loans.error} onRetry={() => void loans.refetch()} />;

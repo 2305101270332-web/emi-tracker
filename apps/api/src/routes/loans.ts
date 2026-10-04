@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { isValidISODate } from "@emi/core";
-import { instalmentStatusPatchSchema, isoDate, loanInputSchema, overrideSchema, paymentInputSchema, type LoanInput } from "@emi/shared";
+import { instalmentStatusPatchSchema, isoDate, loanInputSchema, overrideSchema, paymentInputSchema, rateChangeInputSchema, type LoanInput } from "@emi/shared";
 import type { AppEnv } from "../env";
 import { ApiError, notFound } from "../lib/errors";
 import { newId } from "../lib/util";
@@ -119,6 +119,43 @@ loanRoutes.put("/:id/instalments/:n/override", async (c) => {
       .run();
     throw err;
   }
+  return c.json(await getLoanDetail(c.env.DB, userId, id));
+});
+
+// ---- Floating-rate changes ----------------------------------------------------------------
+
+async function regenerateFromRow(db: D1Database, userId: string, row: Row) {
+  const input = loanInputFromRow(row);
+  await regenerateSchedule(db, userId, String(row.id), input, await loadCard(db, userId, input.cardId));
+}
+
+loanRoutes.post("/:id/rate-changes", async (c) => {
+  const userId = c.get("userId");
+  const id = c.req.param("id");
+  const row = await loadLoanRow(c.env.DB, userId, id);
+  const rc = rateChangeInputSchema.parse(await c.req.json());
+  if (String(row.repayment_type) !== "reducing") throw new ApiError(422, "rate_change_reducing_only");
+  if (rc.effectiveDate <= String(row.booking_date)) throw new ApiError(422, "rate_change_before_booking");
+  const rcId = newId();
+  await c.env.DB.prepare("INSERT INTO rate_changes (id, user_id, loan_id, effective_date, annual_rate, mode) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(rcId, userId, id, rc.effectiveDate, rc.annualRate, rc.mode)
+    .run();
+  try {
+    await regenerateFromRow(c.env.DB, userId, row);
+  } catch (err) {
+    await c.env.DB.prepare("DELETE FROM rate_changes WHERE id = ? AND user_id = ?").bind(rcId, userId).run();
+    throw err;
+  }
+  return c.json(await getLoanDetail(c.env.DB, userId, id), 201);
+});
+
+loanRoutes.delete("/:id/rate-changes/:rcId", async (c) => {
+  const userId = c.get("userId");
+  const id = c.req.param("id");
+  const row = await loadLoanRow(c.env.DB, userId, id);
+  const res = await c.env.DB.prepare("DELETE FROM rate_changes WHERE id = ? AND loan_id = ? AND user_id = ?").bind(c.req.param("rcId"), id, userId).run();
+  if (!res.meta.changes) throw notFound("rate_change_not_found");
+  await regenerateFromRow(c.env.DB, userId, row);
   return c.json(await getLoanDetail(c.env.DB, userId, id));
 });
 

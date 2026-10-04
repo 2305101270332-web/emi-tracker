@@ -59,7 +59,7 @@ describe("settingsSchema", () => {
   it("validates time zones", () => {
     const base = {
       country: "IN", currency: "INR", locale: "en-IN", timeZone: "Asia/Kolkata", dateFormat: "DD/MM/YYYY",
-      taxLabel: "GST", taxRate: 18, theme: "system", reminderHour: 9, reminderDaysBefore: [3, 1],
+      taxLabel: "GST", taxRate: 18, theme: "system", reminderHour: 9, dueWindowDays: 7, reminderDaysBefore: [3, 1],
       remindOnDay: true, remindOverdue: true, pushEnabled: true, emailReminders: true, weeklySummary: false,
     };
     expect(settingsSchema.safeParse(base).success).toBe(true);

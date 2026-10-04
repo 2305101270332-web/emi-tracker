@@ -1,7 +1,8 @@
 import { Hono } from "hono";
-import { settingsPatchSchema, type Me, type Settings } from "@emi/shared";
+import { deleteAccountSchema, settingsPatchSchema, type Me, type Settings } from "@emi/shared";
+import { clearSession } from "../lib/auth";
 import type { AppEnv } from "../env";
-import { notFound } from "../lib/errors";
+import { ApiError, notFound } from "../lib/errors";
 import { SETTINGS_COLUMNS, settingsFromRow, settingsValue } from "../services/repo";
 
 export const accountRoutes = new Hono<AppEnv>();
@@ -33,4 +34,63 @@ accountRoutes.patch("/settings", async (c) => {
   }
   const row = await c.env.DB.prepare("SELECT * FROM settings WHERE user_id = ?").bind(userId).first<Record<string, unknown>>();
   return c.json(settingsFromRow(row!));
+});
+
+/** Tables holding user data, children first (deletion order). */
+const USER_TABLES = ["notifications", "push_subscriptions", "documents", "payments", "instalments", "rate_changes", "loans", "cards", "lenders", "settings"] as const;
+
+/** Full data export (JSON). Push endpoints are omitted (device secrets, not user data). */
+accountRoutes.get("/account/export", async (c) => {
+  const userId = c.get("userId");
+  const db = c.env.DB;
+  const tables = ["settings", "lenders", "cards", "loans", "instalments", "payments", "rate_changes", "documents", "notifications"] as const;
+  const results = await db.batch([
+    db.prepare("SELECT id, email, name, picture, created_at, last_login_at FROM users WHERE id = ?").bind(userId),
+    ...tables.map((t) => db.prepare(`SELECT * FROM ${t} WHERE user_id = ?`).bind(userId)),
+  ]);
+  const data: Record<string, unknown> = {
+    exportedAt: new Date().toISOString(),
+    format: "emi-tracker-export",
+    version: 1,
+    note: "Money values are integers in each currency's minor unit; dates are ISO 8601.",
+    user: (results[0]!.results as Record<string, unknown>[])[0] ?? null,
+  };
+  tables.forEach((t, i) => {
+    let rows = results[i + 1]!.results as Record<string, unknown>[];
+    if (t === "documents") rows = rows.map(({ r2_key: _k, ...rest }) => rest);
+    data[t] = rows;
+  });
+  return new Response(JSON.stringify(data, null, 2), {
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Disposition": `attachment; filename="emi-tracker-export-${new Date().toISOString().slice(0, 10)}.json"`,
+      "Cache-Control": "no-store",
+    },
+  });
+});
+
+/** Permanently delete the account: R2 files, every row, and the session. Requires typing the account email. */
+accountRoutes.delete("/account", async (c) => {
+  const userId = c.get("userId");
+  const db = c.env.DB;
+  const { confirmEmail } = deleteAccountSchema.parse(await c.req.json());
+  const user = await db.prepare("SELECT email FROM users WHERE id = ?").bind(userId).first<{ email: string }>();
+  if (!user) throw new ApiError(404, "user_not_found");
+  if (user.email.toLowerCase() !== confirmEmail.trim().toLowerCase()) throw new ApiError(422, "email_mismatch");
+
+  // Delete R2 files first (by prefix, 1000 per page). If the DB step then fails, a retry
+  // finds no files left and simply finishes the row deletion.
+  let cursor: string | undefined;
+  do {
+    const page = await c.env.DOCS.list({ prefix: `u/${userId}/`, cursor, limit: 1000 });
+    if (page.objects.length) await c.env.DOCS.delete(page.objects.map((o) => o.key));
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+
+  await db.batch([
+    ...USER_TABLES.map((t) => db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).bind(userId)),
+    db.prepare("DELETE FROM users WHERE id = ?").bind(userId),
+  ]);
+  clearSession(c);
+  return c.body(null, 204);
 });

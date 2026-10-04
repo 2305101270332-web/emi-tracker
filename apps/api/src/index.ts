@@ -7,6 +7,7 @@ import { originGuard, rateLimit, securityHeaders } from "./lib/security";
 import { accountRoutes } from "./routes/account";
 import { authRoutes } from "./routes/auth";
 import { cardRoutes, lenderRoutes } from "./routes/lenders-cards";
+import { documentRoutes } from "./routes/documents";
 import { dashboardRoutes, instalmentRoutes, loanRoutes } from "./routes/loans";
 import { notificationRoutes, publicEmailRoutes, pushRoutes } from "./routes/notify";
 import { runReminders } from "./services/reminders";
@@ -40,6 +41,7 @@ export function createApp() {
   authed.route("/dashboard", dashboardRoutes);
   authed.route("/notifications", notificationRoutes);
   authed.route("/push", pushRoutes);
+  authed.route("/", documentRoutes);
   app.route("/", authed);
 
   app.notFound((c) => c.json({ error: "not_found" }, 404));

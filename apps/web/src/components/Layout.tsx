@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Bell, CalendarDays, CreditCard, Download, LayoutDashboard, Landmark, Settings, Share, WifiOff, X } from "lucide-react";
+import { Bell, Calculator, CalendarDays, CreditCard, Download, LayoutDashboard, Landmark, Settings, Share, WifiOff, X } from "lucide-react";
 import { useNotifications } from "../lib/queries";
 import { useInstallPrompt, useOnline } from "../lib/pwa";
 import { cx } from "./ui";
@@ -11,8 +11,12 @@ const NAV = [
   { to: "/loans", key: "nav.loans", icon: Landmark },
   { to: "/calendar", key: "nav.calendar", icon: CalendarDays },
   { to: "/cards", key: "nav.cards", icon: CreditCard },
+  { to: "/tools", key: "nav.tools", icon: Calculator },
   { to: "/settings", key: "nav.settings", icon: Settings },
 ] as const;
+
+/** Phone bottom bar has room for five; Cards is reachable from the Loans page. */
+const MOBILE_NAV = NAV.filter((n) => n.to !== "/cards");
 
 function Logo() {
   return <img src="/icons/icon.svg" alt="" width={32} height={32} className="rounded-lg" />;
@@ -182,7 +186,7 @@ export function Layout() {
         className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
       >
         <ul className="grid grid-cols-5">
-          {NAV.map(({ to, key, icon: Icon, ...rest }) => (
+          {MOBILE_NAV.map(({ to, key, icon: Icon, ...rest }) => (
             <li key={to}>
               <NavLink
                 to={to}
