@@ -1,0 +1,112 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens (RGB channels so Tailwind can apply alpha).
+ * Ocean blue primary #0077B6 / dark #023E8A / light #CAF0F8, orange accent #FF7A00.
+ * Contrast notes (WCAG AA): primary #0077B6 on white = 4.75:1; text on orange uses
+ * near-black (--on-accent) because white on #FF7A00 is only ~2.6:1; orange *text*
+ * uses --accent-text (#B35500, 4.9:1 on white).
+ */
+:root {
+  --bg: 243 249 252;
+  --surface: 255 255 255;
+  --surface-2: 234 244 250;
+  --text: 11 27 43;
+  --muted: 74 91 108;
+  --border: 214 228 238;
+  --primary: 0 119 182;
+  --primary-strong: 2 62 138;
+  --primary-soft: 202 240 248;
+  --on-primary: 255 255 255;
+  --accent: 255 122 0;
+  --on-accent: 31 19 0;
+  --accent-text: 179 85 0;
+  --accent-soft: 255 236 217;
+  --danger: 190 24 52;
+  --success: 21 128 61;
+  color-scheme: light;
+}
+
+.dark {
+  --bg: 7 18 30;
+  --surface: 13 30 48;
+  --surface-2: 19 41 64;
+  --text: 230 241 248;
+  --muted: 160 180 196;
+  --border: 33 60 85;
+  --primary: 86 179 235;
+  --primary-strong: 160 214 243;
+  --primary-soft: 16 52 82;
+  --on-primary: 4 20 34;
+  --accent: 255 138 31;
+  --on-accent: 31 19 0;
+  --accent-text: 255 166 92;
+  --accent-soft: 64 36 10;
+  --danger: 255 120 140;
+  --success: 86 220 140;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  @apply bg-bg text-fg antialiased;
+  font-feature-settings: "tnum" 1;
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 3px solid rgb(var(--primary));
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-card border border-line bg-surface shadow-card;
+  }
+  .btn {
+    @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-accent-on hover:brightness-95;
+  }
+  .btn-secondary {
+    @apply btn border border-line bg-surface text-primary-strong hover:bg-surface-2;
+  }
+  .btn-ghost {
+    @apply btn text-primary-strong hover:bg-surface-2;
+  }
+  .btn-danger {
+    @apply btn border border-danger/40 bg-surface text-danger hover:bg-danger/10;
+  }
+  .input {
+    @apply min-h-[44px] w-full rounded-xl border border-line bg-surface px-3 text-base text-fg placeholder:text-muted/70 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30;
+  }
+  .label {
+    @apply mb-1 block text-sm font-medium text-fg;
+  }
+  .hint {
+    @apply mt-1 text-xs text-muted;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+}

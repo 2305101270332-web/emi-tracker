@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>EMI Tracker</title>
+    <meta name="description" content="Schedule, track and calculate loan EMIs in any currency." />
+    <meta name="theme-color" content="#023E8A" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#07121E" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="EMI Tracker" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <script>
+      // Apply theme before first paint to avoid a flash.
+      try {
+        var t = localStorage.getItem("emi-theme") || "system";
+        if (t === "dark" || (t === "system" && matchMedia("(prefers-color-scheme: dark)").matches))
+          document.documentElement.classList.add("dark");
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>EMI Tracker needs JavaScript.</noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

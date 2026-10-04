@@ -1,0 +1,6 @@
+# Copy to .dev.vars for local development. Never commit .dev.vars.
+SESSION_SECRET=change-me-to-a-long-random-string-of-at-least-32-chars
+VAPID_PRIVATE_KEY=
+RESEND_API_KEY=
+RESEND_FROM="EMI Tracker <reminders@yourdomain.com>"
+RESEND_WEBHOOK_SECRET=

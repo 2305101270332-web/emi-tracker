@@ -1,0 +1,9 @@
+{
+  // Cloudflare Pages project. The Pages Function in functions/api proxies
+  // /api/* to the API Worker over a service binding, so the app and API share
+  // one origin and the session cookie is first-party (works in Safari too).
+  "name": "emi-tracker",
+  "pages_build_output_dir": "./dist",
+  "compatibility_date": "2025-09-01",
+  "services": [{ "binding": "API", "service": "emi-tracker-api" }]
+}

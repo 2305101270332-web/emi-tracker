@@ -1,0 +1,28 @@
+{
+  "name": "@emi/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --env dev --test-scheduled",
+    "deploy": "wrangler deploy --env=\"\"",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "db:migrate:local": "wrangler d1 migrations apply emi_tracker --local --env dev",
+    "db:migrate:remote": "wrangler d1 migrations apply emi_tracker --remote --env=\"\"",
+    "db:seed:local": "node scripts/seed.mjs",
+    "vapid": "node scripts/generate-vapid.mjs",
+    "cron:test": "curl \"http://localhost:8787/__scheduled?cron=0+*+*+*+*\""
+  },
+  "dependencies": {
+    "@emi/core": "*",
+    "@emi/shared": "*",
+    "hono": "^4.6.14",
+    "jose": "^5.9.6",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241205.0",
+    "wrangler": "^4.0.0"
+  }
+}
