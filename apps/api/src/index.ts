@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import type { ApiVersion } from "@emi/shared";
 import type { AppEnv, Env } from "./env";
 import { requireAuth } from "./lib/auth";
 import { errorHandler } from "./lib/errors";
@@ -28,6 +29,18 @@ export function createApp() {
   app.use("*", originGuard);
 
   app.get("/health", (c) => c.json({ ok: true }));
+  /** Public build info for the Settings "About" panel (the repo is public, so nothing secret here). */
+  app.get("/version", (c) => {
+    const m = c.env.CF_VERSION_METADATA;
+    const info: ApiVersion = {
+      environment: c.env.ENVIRONMENT,
+      commit: m?.tag || null,
+      versionId: m?.id || null,
+      deployedAt: m?.timestamp || null,
+    };
+    c.header("Cache-Control", "no-store");
+    return c.json(info);
+  });
   app.route("/", publicEmailRoutes);
   app.route("/auth", authRoutes);
 

@@ -9,8 +9,7 @@
     <radialGradient id="lacquer" cx="0.5" cy="0.35" r="0.85">
       <stop offset="0" stop-color="#A11D22"/><stop offset="0.65" stop-color="#6E0F14"/><stop offset="1" stop-color="#3E0709"/>
     </radialGradient>
-  </defs><rect width="64" height="64" rx="14" fill="url(#lacquer)"/>
-       <rect x="3" y="3" width="58" height="58" rx="11.5" fill="none" stroke="#E8C25A" stroke-width="0.9" opacity="0.65"/>
+  </defs>
   <g transform="translate(32 32) scale(1) translate(-32 -32)">
     <circle cx="32" cy="33" r="11" fill="url(#coin)" stroke="#7A5808" stroke-width="1"/>
     <circle cx="32" cy="33" r="8.6" fill="none" stroke="#7A5808" stroke-width="0.7" opacity="0.8"/>

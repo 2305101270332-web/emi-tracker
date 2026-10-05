@@ -111,11 +111,11 @@ publicEmailRoutes.get("/email/unsubscribe", rateLimit("unsub", 30), async (c) =>
   const kind = q.k === "reminders" ? t("email.kindReminders") : t("email.kindWeekly");
   return c.html(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${t("email.unsubscribedTitle")}</title></head>
-<body style="font-family:system-ui,sans-serif;background:#F3F9FC;color:#0B1B2B;display:grid;place-items:center;min-height:100vh;margin:0;padding:16px">
-<main style="max-width:420px;background:#fff;border-radius:16px;padding:24px;box-shadow:0 2px 8px rgba(2,62,138,.08)">
-<h1 style="color:#023E8A;font-size:22px;margin:0 0 8px">${t("email.unsubscribedTitle")}</h1>
-<p style="color:#4A5B6C;line-height:1.5">${t("email.unsubscribedBody", { kind })}</p>
-<p><a href="${c.env.APP_ORIGIN}/settings" style="color:#0077B6">${t("nav.settings")}</a></p></main></body></html>`);
+<body style="font-family:system-ui,sans-serif;background:#F6EEDC;color:#2B1510;display:grid;place-items:center;min-height:100vh;margin:0;padding:16px">
+<main style="max-width:420px;background:#fff;border-radius:16px;padding:24px;border:1px solid #C9A227;box-shadow:0 2px 8px rgba(62,7,9,.12)">
+<h1 style="color:#5E1014;font-family:Georgia,serif;font-size:22px;margin:0 0 8px">${t("email.unsubscribedTitle")}</h1>
+<p style="color:#6B4A36;line-height:1.5">${t("email.unsubscribedBody", { kind })}</p>
+<p><a href="${c.env.APP_ORIGIN}/settings" style="color:#8E1B1B">${t("nav.settings")}</a></p></main></body></html>`);
 });
 
 // RFC 8058 one-click unsubscribe (mail clients POST to the List-Unsubscribe URL).

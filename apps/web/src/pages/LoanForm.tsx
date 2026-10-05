@@ -181,7 +181,7 @@ function AddLenderDialog({ open, onClose, onAdded, country }: { open: boolean; o
   const { t } = useTranslation();
   const add = useAddLender();
   const [name, setName] = useState("");
-  const [color, setColor] = useState("#0077B6");
+  const [color, setColor] = useState("#8E1B1B");
   const [initial, setInitial] = useState("");
   const submit = async (e: FormEvent) => {
     e.preventDefault();

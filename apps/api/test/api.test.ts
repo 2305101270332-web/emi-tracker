@@ -303,3 +303,17 @@ describe("demo seed", () => {
     expect((await c.post("/auth/dev/seed")).json.created).toBe(0); // idempotent
   });
 });
+
+describe("version endpoint", () => {
+  it("reports nothing deployed when running without Cloudflare version metadata", async () => {
+    const res = await client(makeEnv()).get("/version");
+    expect(res.status).toBe(200);
+    expect(res.json).toEqual({ environment: "test", commit: null, versionId: null, deployedAt: null });
+  });
+  it("reports the deployed commit, Worker version and deploy time", async () => {
+    const env = makeEnv({ CF_VERSION_METADATA: { id: "8f3c2a10-0000-4000-8000-000000000000", tag: "abc1234def", timestamp: "2026-10-05T09:12:00.000Z" } });
+    const res = await client(env).get("/version");
+    expect(res.json).toMatchObject({ commit: "abc1234def", versionId: "8f3c2a10-0000-4000-8000-000000000000", deployedAt: "2026-10-05T09:12:00.000Z" });
+    expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+});

@@ -4,6 +4,7 @@ import { CreditCard, Pencil, Plus, Trash2 } from "lucide-react";
 import { cardInputSchema, type Card } from "@emi/shared";
 import { HttpError, errorMessage } from "../lib/api";
 import { useCards, useDeleteCard, useLenders, useSaveCard } from "../lib/queries";
+import { DragonEmblem } from "../components/DragonEmblem";
 import { Dialog, ErrorState, LenderAvatar, PageHeader, SelectField, Spinner, TextField } from "../components/ui";
 
 function CardDialog({ card, onClose }: { card: Card | null; onClose: () => void }) {
@@ -133,7 +134,8 @@ export function Cards() {
             const lender = lenders.data?.find((l) => l.id === c.lenderId);
             return (
               <li key={c.id} className="card overflow-hidden">
-                <div className="bg-gradient-to-br from-primary-strong to-primary p-4 text-white">
+                <div className="lacquer relative overflow-hidden p-4">
+                  <DragonEmblem size={88} className="pointer-events-none absolute -bottom-6 -right-5 opacity-25" />
                   <div className="flex items-center justify-between">
                     <span className="font-semibold">{c.nickname}</span>
                     {lender && <LenderAvatar lender={lender} size={28} />}

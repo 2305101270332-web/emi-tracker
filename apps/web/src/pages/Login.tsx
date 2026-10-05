@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
+import { DragonEmblem } from "../components/DragonEmblem";
 import { api } from "../lib/api";
 import { keys } from "../lib/queries";
 
@@ -75,11 +76,20 @@ export function Login() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-primary-strong to-primary px-4 py-10">
-      <div className="card w-full max-w-md p-8 text-center">
-        <img src="/icons/icon.svg" alt="" width={64} height={64} className="mx-auto mb-4 rounded-2xl" />
-        <h1 className="text-3xl font-bold text-primary-strong">{t("common.appName")}</h1>
-        <p className="mt-2 text-muted">{t("auth.tagline")}</p>
+    <main className="lacquer relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
+      {/* Large faint dragon behind the card */}
+      <DragonEmblem size={720} className="pointer-events-none absolute -right-40 -top-32 opacity-[0.08] animate-[coil_120s_linear_infinite]" />
+      <div className="card animate-pop relative w-full max-w-md border-accent/70 p-8 text-center">
+        <div className="mx-auto mb-4 w-fit rounded-full p-1.5 ring-2 ring-accent/60 ring-offset-4 ring-offset-surface">
+          <DragonEmblem size={84} title={t("common.appName")} />
+        </div>
+        <h1 className="gilded-text text-3xl font-bold sm:text-4xl">{t("common.appName")}</h1>
+        <div aria-hidden className="mx-auto mt-2 flex w-40 items-center gap-1.5">
+          <span className="h-px flex-1 bg-gradient-to-r from-transparent to-accent" />
+          <span className="h-1.5 w-1.5 rotate-45 bg-accent" />
+          <span className="h-px flex-1 bg-gradient-to-l from-transparent to-accent" />
+        </div>
+        <p className="mt-3 text-muted">{t("auth.tagline")}</p>
         <div className="mt-8 flex min-h-[44px] justify-center" ref={btnRef} aria-label={t("auth.signInWithGoogle")} />
         {(!CLIENT_ID || CLIENT_ID.startsWith("your-")) && <p className="mt-2 text-sm text-accent-text">{t("auth.googleNotConfigured")}</p>}
         {error && (

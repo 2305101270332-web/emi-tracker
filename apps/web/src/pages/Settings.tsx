@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Download, Lock, LogOut, MonitorSmartphone, Trash2, UserX } from "lucide-react";
+import { AlertTriangle, Download, ExternalLink, Lock, LogOut, MonitorSmartphone, Trash2, UserX } from "lucide-react";
 import { parseMajor, toMajorString } from "@emi/core";
 import { COMMON_CURRENCIES, COUNTRIES, DATE_FORMATS, TAX_LABELS, countryDefaults, type Settings as SettingsT } from "@emi/shared";
 import { api } from "../lib/api";
-import { useDeleteAccount, useDeleteLender, useDeletionImpact, useLenders, useMe, useSaveSettings } from "../lib/queries";
+import { useApiVersion, useDeleteAccount, useDeleteLender, useDeletionImpact, useLenders, useMe, useSaveSettings } from "../lib/queries";
+import { useFormat } from "../lib/format";
+import { DragonEmblem } from "../components/DragonEmblem";
 import { HttpError, errorMessage } from "../lib/api";
 import { getPushState, subscribePush, unsubscribePush, type PushState } from "../lib/pwa";
 import { applyTheme } from "../lib/theme";
@@ -65,6 +67,84 @@ function PushSettings() {
       )}
       {sent !== null && <p role="status" className="text-xs text-muted">✓ {sent}</p>}
     </div>
+  );
+}
+
+function VersionRow({ label, commit, at, atLabel, repoUrl, extra }: { label: string; commit: string | null; at: string | null; atLabel: string; repoUrl: string; extra?: [string, string][] }) {
+  const { t } = useTranslation();
+  const f = useFormat();
+  const short = commit ? commit.slice(0, 7) : null;
+  return (
+    <div className="rounded-xl border border-line bg-surface-2/60 p-3">
+      <p className="font-display text-sm font-semibold text-primary-strong">{label}</p>
+      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+        <dt className="text-muted">{t("settings.version")}</dt>
+        <dd className="num">
+          {short ? (
+            repoUrl ? (
+              <a
+                href={`${repoUrl}/commit/${commit}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 font-mono font-semibold text-primary underline decoration-accent/60 underline-offset-2 hover:decoration-accent"
+                title={t("settings.viewCommit")}
+              >
+                {short} <ExternalLink size={13} aria-hidden />
+                <span className="sr-only">({t("settings.viewCommit")})</span>
+              </a>
+            ) : (
+              <span className="font-mono font-semibold">{short}</span>
+            )
+          ) : (
+            <span className="text-muted">{t("settings.localBuild")}</span>
+          )}
+        </dd>
+        <dt className="text-muted">{atLabel}</dt>
+        <dd className="num">{at ? <time dateTime={at}>{f.dateTime(at)}</time> : <span className="text-muted">{t("settings.notAvailable")}</span>}</dd>
+        {extra?.map(([k, v]) => (
+          <Fragment key={k}>
+            <dt className="text-muted">{k}</dt>
+            <dd className="truncate font-mono text-xs leading-5">{v}</dd>
+          </Fragment>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+/** Settings → About: which web build and API version are live, and when they were deployed. */
+function AboutSection() {
+  const { t } = useTranslation();
+  const apiV = useApiVersion();
+  const build = __APP_BUILD__;
+  return (
+    <Section title={t("settings.about")}>
+      <p className="mb-3 flex items-center gap-2 text-sm text-muted">
+        <DragonEmblem size={22} />
+        {t("settings.aboutIntro")}
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <VersionRow label={t("settings.webApp")} commit={build.commit || null} at={build.builtAt} atLabel={t("settings.builtAt")} repoUrl={build.repoUrl} />
+        {apiV.data ? (
+          <VersionRow
+            label={t("settings.api")}
+            commit={apiV.data.commit}
+            at={apiV.data.deployedAt}
+            atLabel={t("settings.deployedAt")}
+            repoUrl={build.repoUrl}
+            extra={[
+              ...(apiV.data.versionId ? ([[t("settings.workerVersion"), apiV.data.versionId.slice(0, 8)]] as [string, string][]) : []),
+              [t("settings.environment"), apiV.data.environment],
+            ]}
+          />
+        ) : (
+          <div className="rounded-xl border border-line bg-surface-2/60 p-3 text-sm text-muted">
+            <p className="font-display text-sm font-semibold text-primary-strong">{t("settings.api")}</p>
+            <p className="mt-2">{apiV.isLoading ? t("common.loading") : t("settings.apiUnreachable")}</p>
+          </div>
+        )}
+      </div>
+    </Section>
   );
 }
 
@@ -388,6 +468,7 @@ export function Settings() {
         </Section>
 
         <Section title={t("settings.lenders")}>
+          {!(lenders.data ?? []).some((l) => l.custom) && <p className="text-sm text-muted">{t("settings.lendersEmpty")}</p>}
           <ul className="divide-y divide-line">
             {(lenders.data ?? [])
               .filter((l) => l.custom)
@@ -405,6 +486,8 @@ export function Settings() {
         </Section>
 
         <IncomeSection settings={s} onSave={patch} />
+
+        <AboutSection />
 
         <DataSection
           email={me.data.user.email}

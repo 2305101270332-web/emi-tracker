@@ -9,6 +9,10 @@
 	"observability": {
 		"enabled": true
 	},
+	// Exposes this deployment\'s version id, tag (git commit) and timestamp at runtime.
+	"version_metadata": {
+		"binding": "CF_VERSION_METADATA"
+	},
 	// Hourly reminder job (1 of the 5 cron triggers allowed on the free plan).
 	"triggers": {
 		"crons": [
@@ -54,6 +58,9 @@
 	},
 	"env": {
 		"dev": {
+			"version_metadata": {
+				"binding": "CF_VERSION_METADATA"
+			},
 			"vars": {
 				"ENVIRONMENT": "development",
 				"APP_ORIGIN": "http://localhost:5173",

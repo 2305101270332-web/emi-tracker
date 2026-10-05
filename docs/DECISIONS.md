@@ -79,3 +79,17 @@ not real bank documents — add real statements with `_template.statement.ts`.
 - Instalment *n* is billed on `emiDay` of month *n*, clamped to the month end (29/30/31 → Feb 28/29).
 - Floating-rate changes (Phase 2 engine support already in place) apply from the first instalment billed on/after the effective date and keep tenure.
 - Status: `due` = unpaid and payable within the next 7 days; `overdue` = unpaid and payable before today (user's time zone).
+
+## Visual redesign: imperial gold dragon (2026-10-05, at the owner's request)
+
+| Topic | Decision |
+|---|---|
+| Palette | Crimson/oxblood "lacquer" frames + antique gold accents on parchment (light) / black lacquer (dark). Tokens in `apps/web/src/index.css`; all 28 text/background pairings checked ≥ 4.5:1 (WCAG AA). Status colours: gold = due, scarlet (with a soft pulse) = overdue, green = paid. |
+| Charts | Principal = crimson, interest = gold; light `#B3261E`/`#B8860B`, dark `#B5302A`/`#B68E1F` — re-validated for colour-blind separation per theme. |
+| Typography | Cinzel (bundled via @fontsource, so the CSP needs no font hosts) for headings and brand only; numbers and body stay in a sans for legibility. |
+| Emblem | Gold spiked dragon coiled around a square-holed coin, generated from one geometry file (`dragon-geometry.json`) shared by the React component and the PWA icon renderer (`npm run icons -w @emi/web`). Emails use 龍 as a gold seal. |
+| Dropdowns | Native `<select>` replaced app-wide by a custom WAI-ARIA *select-only combobox* (keyboard, type-ahead, screen-reader active option, flips upward near the screen bottom); same API as before. Date pickers stay native (gold-tinted icon). |
+| Motion | Page transitions, staggered card rise, dialog/dropdown pop, button sheen and press, gold progress fill. All disabled under `prefers-reduced-motion`. |
+| Compact amounts | Chart axes and calendar cells only use compact notation from 1 lakh / 100k up; below that they show whole amounts (en-IN compact "T" = thousand read like "trillion" next to `$`). |
+| Mobile layout | All grid children may shrink (`.grid > * { min-width: 0 }`), fixing horizontal overflow on narrow phones. |
+| Version info | Settings → About shows the web build (commit + build time, from Vite `define`) and the API (commit tag, Cloudflare version id and deploy timestamp from the Workers version-metadata binding, via public `GET /api/version`). CI tags each Worker deploy with the commit. Times are shown in the user's time zone. |

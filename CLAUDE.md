@@ -133,9 +133,13 @@ card's statement date but payable on the card's payment due date. So:
 - Accessible: keyboard navigation, WCAG AA contrast, respects reduced motion.
 
 ## Theme
-Ocean blue primary (around #0077B6, with #023E8A dark and #CAF0F8 light tints) and
-orange accent (around #FF7A00) for primary actions, due and overdue highlights.
-Light and dark mode. Clean, card-based finance UI. Define colours as design tokens.
+Royal "old golden dragon" style (replaces the original ocean blue / orange theme):
+crimson / oxblood lacquer frames (sidebar, bars, dialog headers) with antique gold
+highlights and actions, on parchment (light) or black lacquer (dark). Gold dragon
+emblem coiled around an ancient coin; Cinzel display headings; custom styled inputs and
+dropdowns; smooth, reduced-motion-aware animation. Light and dark mode, card-based UI,
+colours defined as design tokens (apps/web/src/index.css) and contrast-checked (WCAG AA).
+Settings shows the deployed web and API versions with deploy timestamps.
 
 ## Phase 2 features
 - Prepayment / part-payment simulator: choose "reduce tenure" or "reduce EMI", see

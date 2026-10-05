@@ -1,8 +1,32 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+import { execSync } from "node:child_process";
+
+/** Build info shown in Settings → About: commit, build time and repository link. */
+function buildInfo() {
+  const git = (cmd: string) => {
+    try {
+      return execSync(`git ${cmd}`, { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+    } catch {
+      return "";
+    }
+  };
+  const commit = process.env.GITHUB_SHA || git("rev-parse HEAD") || "";
+  // CI provides the repo directly; locally derive https://github.com/<owner>/<repo> from the origin remote.
+  const remote = process.env.GITHUB_REPOSITORY
+    ? `${process.env.GITHUB_SERVER_URL ?? "https://github.com"}/${process.env.GITHUB_REPOSITORY}`
+    : git("remote get-url origin").replace(/\.git$/, "").replace(/^git@github\.com:/, "https://github.com/");
+  return {
+    commit,
+    builtAt: new Date().toISOString(),
+    repoUrl: /^https:\/\//.test(remote) ? remote : "",
+    ci: !!process.env.GITHUB_ACTIONS,
+  };
+}
 
 export default defineConfig({
+  define: { __APP_BUILD__: JSON.stringify(buildInfo()) },
   plugins: [
     react(),
     VitePWA({
@@ -21,8 +45,8 @@ export default defineConfig({
         scope: "/",
         display: "standalone",
         orientation: "portrait-primary",
-        background_color: "#F3F9FC",
-        theme_color: "#023E8A",
+        background_color: "#3E0709",
+        theme_color: "#6E0F14",
         categories: ["finance", "productivity"],
         icons: [
           { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },

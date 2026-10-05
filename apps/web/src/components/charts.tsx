@@ -133,7 +133,7 @@ export function PrincipalInterestChart({ rows, currency }: { rows: { billedDate:
   const y = (v: number) => PAD.top + plotH - (v / top) * plotH;
   const labelEvery = Math.ceil(years.length / Math.max(1, Math.floor(plotW / 44)));
   const m = (v: number) => f.money(v, currency);
-  const compact = (v: number) => f.money(v, currency, { compact: true });
+  const compact = (v: number) => f.moneyShort(v, currency);
 
   const onKey = (e: KeyboardEvent) => {
     if (e.key === "ArrowRight") setActive((a) => Math.min(years.length - 1, (a ?? -1) + 1));
@@ -288,7 +288,7 @@ export function BalanceChart({ points, currency, label }: { points: { date: stri
             <g key={tk}>
               <line x1={PAD.left} x2={width - PAD.right} y1={y(tk)} y2={y(tk)} stroke={GRID} strokeWidth={1} />
               <text x={PAD.left - 6} y={y(tk)} dy="0.32em" textAnchor="end" className="fill-muted text-[10px]">
-                {f.money(tk, currency, { compact: true })}
+                {f.moneyShort(tk, currency)}
               </text>
             </g>
           ))}

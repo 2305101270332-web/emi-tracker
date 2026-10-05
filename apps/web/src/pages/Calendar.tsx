@@ -145,7 +145,7 @@ export function Calendar() {
                                 aria-label={`${i.loanNickname} #${i.n}: ${f.money(i.amount, i.currency)}, ${t(`schedule.statuses.${i.status}`)}`}
                                 title={`${i.loanNickname} · ${f.money(i.amount, i.currency)}`}
                               >
-                                {f.money(i.amount, i.currency, { compact: true })}
+                                {f.moneyShort(i.amount, i.currency)}
                               </Link>
                             </li>
                           ))}
@@ -169,7 +169,7 @@ export function Calendar() {
                   {items.map((i) => (
                     <li key={i.instalmentId} className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <Link to={`/loans/${i.loanId}`} className="truncate font-medium hover:underline">
+                        <Link to={`/loans/${i.loanId}`} className="block truncate font-medium hover:underline">
                           {i.loanNickname} <span className="text-muted">#{i.n}</span>
                         </Link>
                         {i.billedDate !== i.payableDate && <p className="text-xs text-muted">{t("dashboard.billedOn", { date: f.date(i.billedDate) })}</p>}

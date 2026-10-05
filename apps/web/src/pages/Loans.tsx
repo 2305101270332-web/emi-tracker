@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { BellOff, CreditCard, Plus } from "lucide-react";
@@ -27,12 +28,12 @@ export function Loans() {
   if (loans.isLoading) return <Spinner />;
   if (loans.error) return <ErrorState error={loans.error} onRetry={() => void loans.refetch()} />;
 
-  const card = (l: LoanListItem) => {
+  const card = (l: LoanListItem, idx: number) => {
     const closed = l.progress.principalOutstanding <= 0;
     const lend = l.lender ?? lender(l.lenderId);
     return (
-      <li key={l.id}>
-        <Link to={`/loans/${l.id}`} className="card block h-full p-4 transition-shadow hover:shadow-lg">
+      <li key={l.id} className="animate-rise" style={{ "--i": Math.min(idx, 8) } as CSSProperties}>
+        <Link to={`/loans/${l.id}`} className="card block h-full p-4">
           <div className="flex items-start gap-3">
             <LenderAvatar lender={lend} />
             <div className="min-w-0 flex-1">

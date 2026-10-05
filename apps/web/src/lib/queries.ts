@@ -14,6 +14,7 @@ import type {
   RateChangeInput,
   LoanShare,
   DeletionImpact,
+  ApiVersion,
   Settings,
   UpcomingItem,
 } from "@emi/shared";
@@ -198,6 +199,8 @@ export const useRevokeShare = () =>
     ({ loanId, shareId }: { loanId: string; shareId: string }) => api<LoanShare[]>(`/loans/${loanId}/shares/${shareId}`, { method: "DELETE" }),
     (v) => v.loanId,
   );
+
+export const useApiVersion = () => useQuery({ queryKey: ["api-version"], queryFn: () => api<ApiVersion>("/version"), staleTime: 60_000 });
 
 export const useDeletionImpact = (enabled: boolean) =>
   useQuery({ queryKey: ["deletion-impact"], queryFn: () => api<DeletionImpact>("/account/deletion-impact"), enabled, staleTime: 0 });

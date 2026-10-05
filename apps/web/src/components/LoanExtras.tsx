@@ -376,18 +376,16 @@ export function SharingPanel({ loan }: { loan: LoanDetail }) {
                   {s.status === "active" ? t("sharing.active") : t("sharing.pending")}
                 </span>
               </span>
-              <label className="sr-only" htmlFor={`share-${s.id}`}>
-                {t("sharing.access")} — {s.email}
-              </label>
-              <select
-                id={`share-${s.id}`}
-                className="input w-auto min-w-[8rem]"
+              <SelectField
+                label={`${t("sharing.access")} — ${s.email}`}
+                hideLabel
+                className="w-40"
                 value={s.access}
                 onChange={(e) => change.mutate({ loanId: loan.id, shareId: s.id, access: e.target.value as "view" | "edit" })}
               >
                 <option value="view">{t("sharing.view")}</option>
                 <option value="edit">{t("sharing.edit")}</option>
-              </select>
+              </SelectField>
               <button
                 className="btn-ghost px-2 text-danger"
                 onClick={() => confirm(t("sharing.revokeConfirm", { email: s.email })) && revoke.mutate({ loanId: loan.id, shareId: s.id })}

@@ -103,14 +103,15 @@ export async function verifyResendWebhook(
 // ---- Templates ----------------------------------------------------------------------------
 
 const C = {
-  primary: "#0077B6",
-  primaryDark: "#023E8A",
-  light: "#CAF0F8",
-  accent: "#FF7A00",
-  accentText: "#B35500",
-  text: "#0B1B2B",
-  muted: "#4A5B6C",
-  bg: "#F3F9FC",
+  // Imperial gold-dragon theme (matches the app's light tokens; contrast-checked)
+  primary: "#8E1B1B",
+  primaryDark: "#5E1014",
+  light: "#F7EBC6",
+  accent: "#C9A227",
+  accentText: "#7A5808",
+  text: "#2B1510",
+  muted: "#6B4A36",
+  bg: "#F6EEDC",
 };
 
 const esc = (s: string) =>
@@ -131,13 +132,13 @@ function layout(opts: { heading: string; bodyHtml: string; ctaUrl: string; ctaLa
 <body style="margin:0;padding:0;background:${C.bg};font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:${C.text}">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.bg};padding:24px 12px">
 <tr><td align="center">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(2,62,138,.08)">
-<tr><td style="background:${C.primaryDark};padding:20px 24px;color:#ffffff;font-size:18px;font-weight:700">
-<span style="display:inline-block;width:28px;height:28px;line-height:28px;text-align:center;border-radius:8px;background:${C.accent};color:#fff;margin-right:8px">E</span>EMI Tracker</td></tr>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #C9A227;box-shadow:0 2px 8px rgba(62,7,9,.12)">
+<tr><td style="background:${C.primaryDark};background-image:linear-gradient(170deg,#8A161C,#3E0709);padding:20px 24px;color:#F2D88E;font-size:18px;font-weight:700;border-bottom:2px solid ${C.accent}">
+<span style="display:inline-block;width:28px;height:28px;line-height:28px;text-align:center;border-radius:50%;background:${C.accent};color:${C.primaryDark};font-family:Georgia,serif;font-weight:700;margin-right:8px;border:1px solid ${C.accentText}">&#40845;</span><span style="font-family:Georgia,'Times New Roman',serif;letter-spacing:1px;color:#F2D88E">EMI Tracker</span></td></tr>
 <tr><td style="padding:24px">
-<h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;color:${C.primaryDark}">${esc(opts.heading)}</h1>
+<h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;color:${C.primaryDark};font-family:Georgia,'Times New Roman',serif">${esc(opts.heading)}</h1>
 ${opts.bodyHtml}
-<p style="margin:24px 0 0"><a href="${esc(opts.ctaUrl)}" style="display:inline-block;background:${C.accent};color:#ffffff;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:10px">${esc(opts.ctaLabel)}</a></p>
+<p style="margin:24px 0 0"><a href="${esc(opts.ctaUrl)}" style="display:inline-block;background:${C.accent};color:#2A1606;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:10px;border:1px solid ${C.accentText}">${esc(opts.ctaLabel)}</a></p>
 </td></tr>
 <tr><td style="padding:16px 24px;background:${C.light};font-size:12px;color:${C.muted}">
 ${esc(opts.footer)}${opts.unsubUrl ? `<br><a href="${esc(opts.unsubUrl)}" style="color:${C.primaryDark}">${esc(opts.unsubLabel ?? "Unsubscribe")}</a>` : ""}
@@ -218,9 +219,9 @@ function sectionsHtml(sections: DueSection[], user: EmailUser): string {
       const rows = s.lines
         .map(
           (l) => `<tr>
-<td style="padding:8px 0;border-bottom:1px solid #E3EEF5;font-size:14px">${esc(l.loanNickname)} <span style="color:${C.muted}">#${l.n}</span></td>
-<td style="padding:8px 0;border-bottom:1px solid #E3EEF5;font-size:14px;white-space:nowrap">${esc(formatDate(l.payableDate, user.dateFormat, user.locale))}</td>
-<td align="right" style="padding:8px 0;border-bottom:1px solid #E3EEF5;font-size:14px;font-weight:600;white-space:nowrap">${esc(formatMoney(l.amount, l.currency, user.locale))}</td></tr>`,
+<td style="padding:8px 0;border-bottom:1px solid #EADBB8;font-size:14px">${esc(l.loanNickname)} <span style="color:${C.muted}">#${l.n}</span></td>
+<td style="padding:8px 0;border-bottom:1px solid #EADBB8;font-size:14px;white-space:nowrap">${esc(formatDate(l.payableDate, user.dateFormat, user.locale))}</td>
+<td align="right" style="padding:8px 0;border-bottom:1px solid #EADBB8;font-size:14px;font-weight:600;white-space:nowrap">${esc(formatMoney(l.amount, l.currency, user.locale))}</td></tr>`,
         )
         .join("");
       return `<h2 style="margin:20px 0 8px;font-size:16px;color:${C.accentText}">${esc(s.heading)}</h2>

@@ -74,7 +74,8 @@ jobs:
 
       - name: Deploy API Worker
         working-directory: apps/api
-        run: npx wrangler deploy --env=""
+        # The tag (git commit) surfaces at runtime via the version metadata binding (Settings → About).
+        run: npx wrangler deploy --env="" --tag "$GITHUB_SHA" --message "Deployed by GitHub Actions run $GITHUB_RUN_NUMBER"
 
       - name: Build web app
         env:

@@ -7,17 +7,18 @@ import { useCards, useDashboard, useLenders, useMe } from "../lib/queries";
 import { BalanceChart } from "../components/charts";
 import { ErrorState, LenderAvatar, MoneyLines, PageHeader, Section, Spinner, StatusBadge, cx } from "../components/ui";
 
-function Tile({ label, totals, tone = "default", icon }: { label: string; totals: Record<string, number>; tone?: "default" | "accent" | "warn"; icon?: React.ReactNode }) {
+function Tile({ label, totals, tone = "default", icon, index = 0 }: { label: string; totals: Record<string, number>; tone?: "default" | "accent" | "warn"; icon?: React.ReactNode; index?: number }) {
   const f = useFormat();
   return (
     <div
+      style={{ "--i": index } as React.CSSProperties}
       className={cx(
-        "card p-4",
-        tone === "accent" && "border-transparent bg-primary-strong text-white",
+        "card animate-rise p-4",
+        tone === "accent" && "lacquer border-transparent",
         tone === "warn" && currencyEntries(totals).length > 0 && "border-accent/50 bg-accent-soft",
       )}
     >
-      <div className={cx("flex items-center gap-2 text-sm font-medium", tone === "accent" ? "text-primary-soft" : "text-muted")}>
+      <div className={cx("flex items-center gap-2 text-sm font-medium", tone === "accent" ? "text-frame-muted" : "text-muted")}>
         {icon}
         {label}
       </div>
@@ -134,7 +135,7 @@ function PayByRow({ g, cardName }: { g: PayByGroup; cardName: (id: string) => st
         {g.cardId && g.items.length > 1 ? (
           <p className="truncate font-medium">{t("dashboard.cardGroup", { count: g.items.length, card: cardName(g.cardId) })}</p>
         ) : (
-          <Link to={`/loans/${first.loanId}`} className="truncate font-medium hover:underline">
+          <Link to={`/loans/${first.loanId}`} className="block truncate font-medium hover:underline">
             {first.loanNickname} <span className="text-muted">#{first.n}</span>
           </Link>
         )}
@@ -202,15 +203,17 @@ export function Dashboard() {
       <PageHeader title={t("dashboard.greeting", { name: firstName })} actions={addBtn} />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Tile label={t("dashboard.payableThisMonth")} totals={d.payableThisMonth} tone="accent" icon={<CalendarClock size={16} aria-hidden />} />
-        <Tile label={t("dashboard.next7")} totals={d.next7Days} />
-        <Tile label={t("dashboard.next30")} totals={d.next30Days} />
-        <Tile label={t("dashboard.overdue")} totals={d.overdue} tone="warn" icon={<AlertTriangle size={16} aria-hidden />} />
-        <Tile label={t("dashboard.outstanding")} totals={d.outstanding} />
+        <Tile label={t("dashboard.next7")} totals={d.next7Days} index={1} />
+        <Tile label={t("dashboard.next30")} totals={d.next30Days} index={2} />
+        <Tile label={t("dashboard.overdue")} totals={d.overdue} tone="warn" icon={<AlertTriangle size={16} aria-hidden />} index={3} />
+        <Tile label={t("dashboard.outstanding")} totals={d.outstanding} index={4} />
       </div>
       <p className="mt-2 text-xs text-muted">{t("dashboard.perCurrencyNote")}</p>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        <DtiCard dti={d.dti} />
+        <div className="lg:self-start">
+          <DtiCard dti={d.dti} />
+        </div>
         {Object.keys(d.balanceTrend).length > 0 && (
           <Section title={t("charts.balanceTrend")} className="lg:col-span-2">
             <p className="mb-2 text-xs text-muted">{t("charts.balanceTrendDesc")}</p>

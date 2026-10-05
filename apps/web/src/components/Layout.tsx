@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Bell, Calculator, CalendarDays, CreditCard, Download, LayoutDashboard, Landmark, Settings, Share, WifiOff, X } from "lucide-react";
 import { useNotifications } from "../lib/queries";
 import { useInstallPrompt, useOnline } from "../lib/pwa";
+import { DragonEmblem } from "./DragonEmblem";
 import { cx } from "./ui";
 
 const NAV = [
@@ -18,8 +19,18 @@ const NAV = [
 /** Phone bottom bar has room for five; Cards is reachable from the Loans page. */
 const MOBILE_NAV = NAV.filter((n) => n.to !== "/cards");
 
-function Logo() {
-  return <img src="/icons/icon.svg" alt="" width={32} height={32} className="rounded-lg" />;
+function Logo({ size = 34 }: { size?: number }) {
+  return <DragonEmblem size={size} className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.35)]" />;
+}
+
+function Brand({ size }: { size?: number }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-center gap-2.5">
+      <Logo size={size} />
+      <span className="font-display text-lg font-bold tracking-wider text-frame-text">{t("common.appName")}</span>
+    </div>
+  );
 }
 
 function BellLink() {
@@ -29,12 +40,12 @@ function BellLink() {
   return (
     <NavLink
       to="/notifications"
-      className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl text-primary-strong hover:bg-surface-2"
+      className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl text-frame-text transition-colors hover:bg-white/10"
       aria-label={`${t("nav.notifications")}${unread ? ` (${unread})` : ""}`}
     >
       <Bell size={22} aria-hidden />
       {unread > 0 && (
-        <span className="absolute right-1.5 top-1.5 min-w-[18px] rounded-full bg-accent px-1 text-center text-[11px] font-bold leading-[18px] text-accent-on">
+        <span className="animate-pop absolute right-1.5 top-1.5 min-w-[18px] rounded-full bg-accent px-1 text-center text-[11px] font-bold leading-[18px] text-accent-on ring-2 ring-[rgb(var(--frame-to))]">
           {unread > 9 ? "9+" : unread}
         </span>
       )}
@@ -62,7 +73,7 @@ function InstallBanner() {
     }
   };
   return (
-    <div className="card mb-4 flex items-start gap-3 border-primary/30 bg-primary-soft/60 p-4" role="region" aria-label={t("install.title")}>
+    <div className="card animate-rise mb-4 flex items-start gap-3 border-accent/60 bg-accent-soft/60 p-4" role="region" aria-label={t("install.title")}>
       {install.canPrompt ? <Download className="mt-0.5 shrink-0 text-primary-strong" aria-hidden /> : <Share className="mt-0.5 shrink-0 text-primary-strong" aria-hidden />}
       <div className="flex-1">
         <p className="font-semibold text-primary-strong">{install.canPrompt ? t("install.title") : t("install.iosTitle")}</p>
@@ -125,10 +136,14 @@ export function Layout() {
       </a>
 
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-line bg-surface md:flex">
-        <div className="flex items-center gap-3 px-5 py-5">
-          <Logo />
-          <span className="text-lg font-bold text-primary-strong">{t("common.appName")}</span>
+      <aside className="lacquer sticky top-0 hidden h-screen w-64 shrink-0 flex-col md:flex">
+        <div className="px-5 pb-4 pt-6">
+          <Brand size={40} />
+          <div aria-hidden className="mt-4 flex items-center gap-1.5 opacity-80">
+            <span className="h-px flex-1 bg-gradient-to-r from-transparent to-[rgb(var(--frame-text))]" />
+            <span className="h-1.5 w-1.5 rotate-45 bg-[rgb(var(--frame-text))]" />
+            <span className="h-px flex-1 bg-gradient-to-l from-transparent to-[rgb(var(--frame-text))]" />
+          </div>
         </div>
         <nav aria-label={t("nav.mainNavigation")} className="flex-1 px-3">
           <ul className="space-y-1">
@@ -139,8 +154,10 @@ export function Layout() {
                   end={"end" in rest}
                   className={({ isActive }) =>
                     cx(
-                      "flex min-h-[44px] items-center gap-3 rounded-xl px-3 text-sm font-medium",
-                      isActive ? "bg-primary-soft text-primary-strong" : "text-muted hover:bg-surface-2 hover:text-fg",
+                      "group relative flex min-h-[44px] items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-all duration-200",
+                      isActive
+                        ? "bg-gradient-to-r from-accent-bright to-accent text-[#3A0A08] shadow-[0_4px_14px_-6px_rgb(var(--accent))]"
+                        : "text-frame-muted hover:translate-x-1 hover:bg-white/10 hover:text-frame-text",
                     )
                   }
                 >
@@ -152,7 +169,15 @@ export function Layout() {
           </ul>
         </nav>
         <div className="px-3 pb-5">
-          <NavLink to="/notifications" className="flex min-h-[44px] items-center gap-3 rounded-xl px-3 text-sm font-medium text-muted hover:bg-surface-2">
+          <NavLink
+            to="/notifications"
+            className={({ isActive }) =>
+              cx(
+                "flex min-h-[44px] items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-all duration-200",
+                isActive ? "bg-gradient-to-r from-accent-bright to-accent text-[#3A0A08]" : "text-frame-muted hover:translate-x-1 hover:bg-white/10 hover:text-frame-text",
+              )
+            }
+          >
             <Bell size={20} aria-hidden /> {t("nav.notifications")}
           </NavLink>
         </div>
@@ -160,11 +185,8 @@ export function Layout() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Mobile top bar */}
-        <header className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-surface/95 px-4 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur md:hidden">
-          <div className="flex items-center gap-2">
-            <Logo />
-            <span className="font-bold text-primary-strong">{t("common.appName")}</span>
-          </div>
+        <header className="lacquer sticky top-0 z-30 flex items-center justify-between px-4 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:hidden">
+          <Brand size={32} />
           <BellLink />
         </header>
 
@@ -176,14 +198,16 @@ export function Layout() {
 
         <main id="main" tabIndex={-1} className="mx-auto w-full max-w-6xl flex-1 px-4 pb-28 pt-5 outline-none sm:px-6 md:pb-10">
           <InstallBanner />
-          <Outlet />
+          <div key={location.pathname} className="animate-page-in">
+            <Outlet />
+          </div>
         </main>
       </div>
 
       {/* Mobile bottom navigation */}
       <nav
         aria-label={t("nav.mainNavigation")}
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+        className="lacquer fixed inset-x-0 bottom-0 z-30 pb-[env(safe-area-inset-bottom)] md:hidden"
       >
         <ul className="grid grid-cols-5">
           {MOBILE_NAV.map(({ to, key, icon: Icon, ...rest }) => (
@@ -192,12 +216,20 @@ export function Layout() {
                 to={to}
                 end={"end" in rest}
                 className={({ isActive }) =>
-                  cx("flex min-h-[60px] flex-col items-center justify-center gap-1 text-[11px] font-medium", isActive ? "text-primary" : "text-muted")
+                  cx(
+                    "flex min-h-[60px] flex-col items-center justify-center gap-1 text-[11px] font-semibold transition-colors",
+                    isActive ? "text-accent-bright" : "text-frame-muted",
+                  )
                 }
               >
                 {({ isActive }) => (
                   <>
-                    <span className={cx("rounded-full px-4 py-1", isActive && "bg-primary-soft")}>
+                    <span
+                      className={cx(
+                        "rounded-full px-4 py-1 transition-all duration-300",
+                        isActive ? "-translate-y-0.5 bg-gradient-to-b from-accent-bright to-accent text-[#3A0A08] shadow-[0_4px_12px_-4px_rgb(var(--accent))]" : "",
+                      )}
+                    >
                       <Icon size={20} aria-hidden />
                     </span>
                     {t(key)}

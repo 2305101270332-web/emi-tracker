@@ -3,6 +3,9 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HttpError } from "./lib/api";
 import "./lib/i18n";
+// Royal display face for headings (bundled, so the CSP needs no external font hosts).
+import "@fontsource/cinzel/600.css";
+import "@fontsource/cinzel/700.css";
 import "./index.css";
 import { App } from "./App";
 

@@ -2,6 +2,8 @@ export interface Env {
   DB: D1Database;
   DOCS: R2Bucket;
   RATE_LIMITER?: RateLimit;
+  /** Cloudflare version metadata: id, tag (we set the git commit) and deploy timestamp. */
+  CF_VERSION_METADATA?: { id: string; tag: string; timestamp: string };
 
   ENVIRONMENT: "production" | "development" | "test";
   APP_ORIGIN: string;

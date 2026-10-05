@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { formatMoney, todayInZone } from "@emi/core";
+import { formatMoney, toMajor, todayInZone } from "@emi/core";
 import { formatDate, type Settings } from "@emi/shared";
 import { useMe } from "./queries";
 
@@ -21,6 +21,19 @@ export function useFormat() {
       defaultCurrency: s.currency,
       money: (amount: number, currency: string, opts?: { compact?: boolean }) => formatMoney(amount, currency, s.locale, opts),
       date: (iso: string) => formatDate(iso, s.dateFormat, s.locale),
+      /**
+       * Short money for chart axes and calendar cells. Compact notation only from one lakh /
+       * 100k up: below that, en-IN's compact "T" (thousand) reads like "trillion" next to $.
+       */
+      moneyShort: (amount: number, currency: string) => {
+        const major = toMajor(amount, currency);
+        return Math.abs(major) >= 100_000
+          ? formatMoney(amount, currency, s.locale, { compact: true })
+          : new Intl.NumberFormat(s.locale, { style: "currency", currency, maximumFractionDigits: 0 }).format(major);
+      },
+      /** Full timestamp (date + time) in the user's time zone. */
+      dateTime: (isoTs: string) =>
+        new Intl.DateTimeFormat(s.locale, { dateStyle: "medium", timeStyle: "short", timeZone: s.timeZone }).format(new Date(isoTs)),
       shortDate: (iso: string) =>
         new Intl.DateTimeFormat(s.locale, { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(iso + "T00:00:00Z")),
       monthShort: (iso: string) =>

@@ -195,6 +195,17 @@ export interface AppNotification {
   readAt: string | null;
 }
 
+/** GET /api/version — what is deployed. */
+export interface ApiVersion {
+  environment: string;
+  /** Git commit (full SHA) the Worker was deployed from, when deployed by CI. */
+  commit: string | null;
+  /** Cloudflare Worker version id. */
+  versionId: string | null;
+  /** When this Worker version was deployed (ISO 8601). */
+  deployedAt: string | null;
+}
+
 export interface ApiError {
   error: string;
   message?: string;
