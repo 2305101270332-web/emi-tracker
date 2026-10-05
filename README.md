@@ -80,6 +80,10 @@ Follow **[docs/DEPLOY.md](docs/DEPLOY.md)** — a step-by-step first-deploy chec
 commands: Google OAuth client, D1, R2, VAPID keys, Resend domain + webhook, secrets, Worker and
 Pages deploys, and a smoke test.
 
+After the first deploy, pushes to `main` deploy automatically via GitHub Actions
+(`.github/workflows/deploy.yml`: tests → D1 migrations → Worker → Pages → health check);
+see "Automatic deploys from GitHub" in docs/DEPLOY.md.
+
 In short: the web app is a Cloudflare Pages project whose Pages Function forwards `/api/*` to the
 API Worker over a service binding, so app and API share one origin and the session cookie is
 first-party (`HttpOnly; Secure; SameSite=Lax`). CORS is additionally locked to `APP_ORIGIN`.

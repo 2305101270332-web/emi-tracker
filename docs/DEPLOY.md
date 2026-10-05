@@ -171,7 +171,29 @@ Pages project → **Custom domains** → add `app.yourdomain.com`. Then update `
 (step 7), the Google **Authorized JavaScript origins** (step 2) and the Resend webhook URL (step 6),
 and redeploy the Worker (step 9).
 
-## Updating later
+## Automatic deploys from GitHub (recommended after the first deploy)
+
+`.github/workflows/deploy.yml` runs on every push to `main`: typecheck + tests, then
+D1 migrations → API Worker → web app (Pages) → health check. Pull requests only run the tests.
+
+One-time setup:
+
+1. **Cloudflare API token** — dashboard → *My Profile → API Tokens → Create Token → Create Custom Token*:
+   - Permissions (all *Account*): **Workers Scripts: Edit**, **D1: Edit**, **Cloudflare Pages: Edit**,
+     **Workers R2 Storage: Read**, **Account Settings: Read**
+   - Account resources: *Include → your account*. Create, then copy the token (shown once).
+2. **GitHub repo settings** (or with `gh`):
+   ```bash
+   gh secret set CLOUDFLARE_API_TOKEN --repo <owner>/emi-tracker        # paste the token
+   gh variable set CLOUDFLARE_ACCOUNT_ID --repo <owner>/emi-tracker --body <account id>
+   gh variable set VITE_GOOGLE_CLIENT_ID --repo <owner>/emi-tracker --body <client id>
+   ```
+3. Push to `main`, then watch **Actions** on GitHub.
+
+Worker secrets (SESSION_SECRET, VAPID_PRIVATE_KEY, Resend keys) stay in Cloudflare; deploys keep them.
+Anyone with write access to the repo can deploy by pushing to `main`.
+
+## Updating later (manual)
 
 ```bash
 npm test
