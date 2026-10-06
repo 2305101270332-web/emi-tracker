@@ -15,6 +15,28 @@ export type LoanType = (typeof LOAN_TYPES)[number];
 export const TAX_LABELS = ["GST", "VAT", "Sales Tax", "None"] as const;
 export type TaxLabel = (typeof TAX_LABELS)[number];
 
+export const EXPENSE_CATEGORIES = [
+  "housing",
+  "food",
+  "fitness",
+  "health",
+  "subscriptions",
+  "utilities",
+  "transport",
+  "insurance",
+  "education",
+  "family",
+  "entertainment",
+  "other",
+] as const;
+export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+
+export const EXPENSE_FREQUENCIES = ["monthly", "quarterly", "yearly"] as const;
+export type ExpenseFrequency = (typeof EXPENSE_FREQUENCIES)[number];
+
+/** Keeps the expenses table small (and inside D1's free tier) even for heavy users. */
+export const MAX_EXPENSES_PER_USER = 200;
+
 export const INSTALMENT_STATUSES = ["upcoming", "due", "paid", "overdue", "skipped"] as const;
 
 export const DATE_FORMATS = ["DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD", "DD MMM YYYY"] as const;

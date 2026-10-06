@@ -16,7 +16,7 @@ import {
   type RateChangeMode,
   type ScheduleSummary,
 } from "@emi/core";
-import { toLoanTerms, type Card, type Dashboard, type LenderSnapshot, type LoanAccess, type LoanShare, type Instalment, type LoanDetail, type LoanInput, type LoanListItem, type UpcomingItem } from "@emi/shared";
+import { toLoanTerms, type Card, type CardSnapshot, type Dashboard, type LenderSnapshot, type LoanAccess, type LoanShare, type Instalment, type LoanDetail, type LoanInput, type LoanListItem, type UpcomingItem } from "@emi/shared";
 import { ApiError, notFound } from "../lib/errors";
 import { chunk } from "../lib/util";
 import { cardFromRow, loanFromRow, sqlLiteral } from "./repo";
@@ -187,8 +187,15 @@ function lenderSnapshot(r: Row): LenderSnapshot | null {
   return r.lender_name ? { name: String(r.lender_name), color: String(r.lender_color), initial: String(r.lender_initial) } : null;
 }
 
-const LOAN_WITH_LENDER = `SELECT l.*, ld.name AS lender_name, ld.color AS lender_color, ld.initial AS lender_initial
-  FROM loans l LEFT JOIN lenders ld ON ld.id = l.lender_id`;
+/** Callers must only pass rows of the viewer's own loans: the card is private to the owner. */
+function cardSnapshot(r: Row): CardSnapshot | null {
+  return r.card_nickname ? { nickname: String(r.card_nickname), last4: r.card_last4 ? String(r.card_last4) : null, holderName: r.card_holder ? String(r.card_holder) : null } : null;
+}
+
+const LOAN_WITH_LENDER = `SELECT l.*, ld.name AS lender_name, ld.color AS lender_color, ld.initial AS lender_initial,
+    cd.nickname AS card_nickname, cd.last4 AS card_last4, cd.holder_name AS card_holder
+  FROM loans l LEFT JOIN lenders ld ON ld.id = l.lender_id
+  LEFT JOIN cards cd ON cd.id = l.card_id AND cd.user_id = l.user_id`;
 
 function shareFromRow(r: Row): LoanShare {
   return {
@@ -239,6 +246,7 @@ export async function getLoanDetail(db: D1Database, ownerId: string, loanId: str
     nextInstalment: instalments.find((i) => !i.payment && !i.skipped) ?? null,
     access: v.role,
     lender: lenderSnapshot(row),
+    card: isOwner ? cardSnapshot(row) : null,
     ownerName: isOwner ? null : (v.ownerName ?? null),
     rateChanges: (rcRes!.results as Row[]).map((r) => ({
       id: String(r.id),
@@ -275,6 +283,7 @@ function toListItems(loanRows: Row[], instRows: Row[], ctx: StatusCtx, role: (r:
       nextInstalment: inst.find((i) => !i.payment && !i.skipped) ?? null,
       access: role(r),
       lender: lenderSnapshot(r),
+      card: isOwner(r) ? cardSnapshot(r) : null,
       ownerName: isOwner(r) ? null : r.owner_name ? String(r.owner_name) : null,
     };
   });

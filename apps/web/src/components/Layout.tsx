@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Bell, Calculator, CalendarDays, CreditCard, Download, LayoutDashboard, Landmark, Settings, Share, WifiOff, X } from "lucide-react";
+import { Bell, Calculator, CalendarDays, CreditCard, Download, LayoutDashboard, Landmark, Settings, Share, WalletCards, WifiOff, X } from "lucide-react";
 import { useNotifications } from "../lib/queries";
 import { useInstallPrompt, useOnline } from "../lib/pwa";
 import { DragonEmblem } from "./DragonEmblem";
@@ -10,14 +10,18 @@ import { cx } from "./ui";
 const NAV = [
   { to: "/", key: "nav.dashboard", icon: LayoutDashboard, end: true },
   { to: "/loans", key: "nav.loans", icon: Landmark },
+  { to: "/budget", key: "nav.budget", icon: WalletCards },
   { to: "/calendar", key: "nav.calendar", icon: CalendarDays },
   { to: "/cards", key: "nav.cards", icon: CreditCard },
   { to: "/tools", key: "nav.tools", icon: Calculator },
   { to: "/settings", key: "nav.settings", icon: Settings },
 ] as const;
 
-/** Phone bottom bar has room for five; Cards is reachable from the Loans page. */
-const MOBILE_NAV = NAV.filter((n) => n.to !== "/cards");
+/**
+ * Phone bottom bar has room for five: Cards is reachable from the Loans page and
+ * Settings from the gear in the top bar.
+ */
+const MOBILE_NAV = NAV.filter((n) => n.to !== "/cards" && n.to !== "/settings");
 
 function Logo({ size = 34 }: { size?: number }) {
   return <DragonEmblem size={size} className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.35)]" />;
@@ -187,7 +191,16 @@ export function Layout() {
         {/* Mobile top bar */}
         <header className="lacquer sticky top-0 z-30 flex items-center justify-between px-4 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:hidden">
           <Brand size={32} />
-          <BellLink />
+          <div className="flex items-center">
+            <NavLink
+              to="/settings"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-frame-text transition-colors hover:bg-white/10"
+              aria-label={t("nav.settings")}
+            >
+              <Settings size={22} aria-hidden />
+            </NavLink>
+            <BellLink />
+          </div>
         </header>
 
         {!online && (

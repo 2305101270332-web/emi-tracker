@@ -335,6 +335,7 @@ function LoanFormInner({ loan, settings }: { loan?: LoanDetail; settings?: Setti
                     <option key={c.id} value={c.id}>
                       {c.nickname}
                       {c.last4 ? ` ••${c.last4}` : ""}
+                      {c.holderName ? ` (${c.holderName})` : ""}
                     </option>
                   ))}
                 </SelectField>

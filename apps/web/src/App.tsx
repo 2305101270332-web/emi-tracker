@@ -9,6 +9,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { LoanDetail } from "./pages/LoanDetail";
 import { LoanForm } from "./pages/LoanForm";
 import { Loans } from "./pages/Loans";
+import { Budget } from "./pages/Budget";
 import { Login } from "./pages/Login";
 import { Notifications } from "./pages/Notifications";
 import { Settings } from "./pages/Settings";
@@ -29,6 +30,7 @@ export function AppRoutes() {
         <Route path="loans/new" element={<LoanForm />} />
         <Route path="loans/:id" element={<LoanDetail />} />
         <Route path="loans/:id/edit" element={<LoanForm />} />
+        <Route path="budget" element={<Budget />} />
         <Route path="calendar" element={<Calendar />} />
         <Route path="cards" element={<Cards />} />
         <Route path="tools" element={<Tools />} />

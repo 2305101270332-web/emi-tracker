@@ -7,6 +7,7 @@ import { useFormat } from "../lib/format";
 import { useMe } from "../lib/queries";
 import { PageHeader, Section, SelectField, TextField, Toggle, cx } from "../components/ui";
 import { Payoff } from "./Payoff";
+import { ExtraCashPlanner } from "./ExtraCash";
 
 interface QuickState {
   label: string;
@@ -255,14 +256,16 @@ function Compare() {
   );
 }
 
+const TABS = ["calculator", "compare", "payoff", "extraCash"] as const;
+
 export function Tools() {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<"calculator" | "compare" | "payoff">("calculator");
+  const [tab, setTab] = useState<(typeof TABS)[number]>("calculator");
   return (
     <>
       <PageHeader title={t("tools.title")} />
       <div role="tablist" aria-label={t("tools.title")} className="mb-5 inline-flex max-w-full overflow-x-auto rounded-xl border border-line bg-surface p-1">
-        {(["calculator", "compare", "payoff"] as const).map((v) => (
+        {TABS.map((v) => (
           <button
             key={v}
             role="tab"
@@ -271,9 +274,8 @@ export function Tools() {
             aria-controls={`panel-${v}`}
             tabIndex={tab === v ? 0 : -1}
             onKeyDown={(e) => {
-              const order = ["calculator", "compare", "payoff"] as const;
-              const i = order.indexOf(v);
-              const next = e.key === "ArrowRight" ? order[(i + 1) % 3] : e.key === "ArrowLeft" ? order[(i + 2) % 3] : null;
+              const i = TABS.indexOf(v);
+              const next = e.key === "ArrowRight" ? TABS[(i + 1) % TABS.length] : e.key === "ArrowLeft" ? TABS[(i + TABS.length - 1) % TABS.length] : null;
               if (!next) return;
               e.preventDefault();
               setTab(next);
@@ -287,7 +289,7 @@ export function Tools() {
         ))}
       </div>
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
-        {tab === "calculator" ? <Calculator /> : tab === "compare" ? <Compare /> : <Payoff />}
+        {tab === "calculator" ? <Calculator /> : tab === "compare" ? <Compare /> : tab === "payoff" ? <Payoff /> : <ExtraCashPlanner />}
       </div>
     </>
   );

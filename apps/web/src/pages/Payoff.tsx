@@ -10,7 +10,7 @@ import { useFormat } from "../lib/format";
 import { useLoans } from "../lib/queries";
 
 /** Own, active, reducing-balance loans as payoff debts. Shared loans are never included. */
-function debtsFor(loans: LoanListItem[], currency: string): Debt[] {
+export function debtsFor(loans: LoanListItem[], currency: string): Debt[] {
   return loans
     .filter((l) => l.access === "owner" && l.currency === currency && l.repaymentType === "reducing" && l.progress.principalOutstanding > 0)
     .map((l) => ({

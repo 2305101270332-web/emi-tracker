@@ -3,10 +3,25 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { BellOff, CreditCard, Plus } from "lucide-react";
 import { useFormat } from "../lib/format";
-import type { LoanListItem } from "@emi/shared";
+import type { CardSnapshot, LoanListItem } from "@emi/shared";
 import { useLenders, useLoans, useSharedLoans } from "../lib/queries";
-import { ErrorState, LenderAvatar, PageHeader, ProgressBar, SelectField, Spinner } from "../components/ui";
+import { ErrorState, LenderAvatar, PageHeader, ProgressBar, SelectField, Spinner, cx } from "../components/ui";
 import { LOAN_SORTS, readLoanSort, saveLoanSort, sortLoans, type LoanSort } from "../lib/sort-loans";
+
+/** Which card a card EMI is on, and whose name is on it when it isn't the user's own. */
+export function CardLine({ card, className }: { card: CardSnapshot; className?: string }) {
+  const { t } = useTranslation();
+  return (
+    <p className={cx("mt-1 flex min-w-0 items-center gap-1 text-xs text-muted", className)}>
+      <CreditCard size={13} className="shrink-0 text-accent-text" aria-hidden />
+      <span className="truncate">
+        {card.nickname}
+        {card.last4 ? ` ••${card.last4}` : ""}
+        {card.holderName && <> · <span className="font-semibold text-fg">{t("loans.nameOnCard", { name: card.holderName })}</span></>}
+      </span>
+    </p>
+  );
+}
 
 export function Loans() {
   const { t } = useTranslation();
@@ -52,6 +67,7 @@ export function Loans() {
               <p className="truncate text-xs text-muted">
                 {lend?.name} · {l.type === "other" ? l.customTypeLabel : t(`loans.types.${l.type}`)}
               </p>
+              {l.card && <CardLine card={l.card} />}
               {l.access !== "owner" && (
                 <p className="mt-1 flex flex-wrap items-center gap-1 text-xs">
                   <span className="rounded-full bg-primary-soft px-2 py-0.5 font-semibold text-primary-strong">

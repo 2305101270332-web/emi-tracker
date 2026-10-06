@@ -4,6 +4,8 @@ import type {
   Card,
   CardInput,
   Dashboard,
+  Expense,
+  ExpenseInput,
   Lender,
   LenderInput,
   LoanDetail,
@@ -29,6 +31,7 @@ export const keys = {
   dashboard: ["dashboard"] as const,
   instalments: (from: string, to: string) => ["instalments", from, to] as const,
   notifications: ["notifications"] as const,
+  expenses: ["expenses"] as const,
 };
 
 export function useMe() {
@@ -54,6 +57,7 @@ export const useLoan = (id: string | undefined) =>
 export const useDashboard = () => useQuery({ queryKey: keys.dashboard, queryFn: () => api<Dashboard>("/dashboard") });
 export const useInstalments = (from: string, to: string) =>
   useQuery({ queryKey: keys.instalments(from, to), queryFn: () => api<UpcomingItem[]>(`/instalments?from=${from}&to=${to}`) });
+export const useExpenses = () => useQuery({ queryKey: keys.expenses, queryFn: () => api<Expense[]>("/expenses") });
 export const useNotifications = () =>
   useQuery({ queryKey: keys.notifications, queryFn: () => api<AppNotification[]>("/notifications"), refetchInterval: 5 * 60_000 });
 
@@ -125,6 +129,14 @@ export const useSaveCard = () =>
     () => [keys.cards, ...loanDataKeys()],
   );
 export const useDeleteCard = () => useApiMutation((id: string) => api<void>(`/cards/${id}`, { method: "DELETE" }), () => [keys.cards]);
+
+export const useSaveExpense = () =>
+  useApiMutation(
+    ({ id, input }: { id?: string; input: ExpenseInput }) =>
+      api<Expense>(id ? `/expenses/${id}` : "/expenses", { method: id ? "PUT" : "POST", body: input }),
+    () => [keys.expenses],
+  );
+export const useDeleteExpense = () => useApiMutation((id: string) => api<void>(`/expenses/${id}`, { method: "DELETE" }), () => [keys.expenses]);
 
 export const useAddLender = () => useApiMutation((input: LenderInput) => api<Lender>("/lenders", { method: "POST", body: input }), () => [keys.lenders]);
 export const useDeleteLender = () => useApiMutation((id: string) => api<void>(`/lenders/${id}`, { method: "DELETE" }), () => [keys.lenders]);

@@ -9,6 +9,7 @@ import { accountRoutes } from "./routes/account";
 import { authRoutes } from "./routes/auth";
 import { cardRoutes, lenderRoutes } from "./routes/lenders-cards";
 import { documentRoutes } from "./routes/documents";
+import { expenseRoutes } from "./routes/expenses";
 import { dashboardRoutes, instalmentRoutes, loanRoutes } from "./routes/loans";
 import { notificationRoutes, publicEmailRoutes, pushRoutes } from "./routes/notify";
 import { runReminders } from "./services/reminders";
@@ -52,6 +53,7 @@ export function createApp() {
   authed.route("/loans", loanRoutes);
   authed.route("/instalments", instalmentRoutes);
   authed.route("/dashboard", dashboardRoutes);
+  authed.route("/expenses", expenseRoutes);
   authed.route("/notifications", notificationRoutes);
   authed.route("/push", pushRoutes);
   authed.route("/", documentRoutes);

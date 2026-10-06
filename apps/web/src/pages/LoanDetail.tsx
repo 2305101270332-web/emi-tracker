@@ -9,6 +9,7 @@ import { useFormat } from "../lib/format";
 import { useDeleteLoan, useLenders, useLoan, useMuteLoan, useOverride, usePay, useSkip, useUnpay } from "../lib/queries";
 import { BalanceChart, PrincipalInterestChart } from "../components/charts";
 import { Documents, ExportMenu, PrepaySimulator, RateChanges, SharingPanel } from "../components/LoanExtras";
+import { CardLine } from "./Loans";
 import { Dialog, ErrorState, LenderAvatar, PageHeader, ProgressBar, Section, Spinner, StatusBadge, TextField, cx } from "../components/ui";
 
 function Stat({ label, value, strong, hint }: { label: string; value: string; strong?: boolean; hint?: string }) {
@@ -218,6 +219,7 @@ export function LoanDetail() {
                 {loan.type === "other" ? loan.customTypeLabel : t(`loans.types.${loan.type}`)} · {t("common.perAnnum", { rate: loan.annualRate })} ·{" "}
                 {t("common.months", { count: loan.tenureMonths })}
               </p>
+              {loan.card && <CardLine card={loan.card} className="text-sm" />}
             </div>
           </div>
           <ProgressBar value={loan.progress.progress} label={t("loans.progress", { percent: Math.round(loan.progress.progress * 100) })} />

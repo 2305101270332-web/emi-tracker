@@ -1,5 +1,5 @@
 import type { InstalmentStatus, LoanProgress, ScheduleSummary } from "@emi/core";
-import type { LoanInput, Settings } from "./schemas";
+import type { ExpenseInput, LoanInput, Settings } from "./schemas";
 
 export interface User {
   id: string;
@@ -29,6 +29,8 @@ export interface Card {
   nickname: string;
   lenderId: string | null;
   last4: string | null;
+  /** Name on the card when it belongs to someone else; null = the user's own card. */
+  holderName: string | null;
   statementDay: number;
   dueDay: number | null;
   graceDays: number | null;
@@ -80,6 +82,19 @@ export interface LenderSnapshot {
   initial: string;
 }
 
+/** The card a card EMI is billed to. Only ever sent to the loan's owner. */
+export interface CardSnapshot {
+  nickname: string;
+  last4: string | null;
+  holderName: string | null;
+}
+
+export interface Expense extends ExpenseInput {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface LoanListItem extends Loan {
   summary: ScheduleSummary;
   progress: LoanProgress;
@@ -87,6 +102,8 @@ export interface LoanListItem extends Loan {
   access: LoanAccess;
   /** Lender name/colour so shared users can see it without access to the owner's custom lenders. */
   lender: LenderSnapshot | null;
+  /** Owner only: the card a credit card EMI is billed to (null for other loans and for shared users). */
+  card: CardSnapshot | null;
   /** Owner's display name; set only for loans shared with the viewer. */
   ownerName: string | null;
 }

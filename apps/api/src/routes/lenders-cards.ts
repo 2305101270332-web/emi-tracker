@@ -63,9 +63,9 @@ cardRoutes.post("/", async (c) => {
   await assertLender(c.env.DB, userId, input.lenderId);
   const id = newId();
   await c.env.DB.prepare(
-    "INSERT INTO cards (id, user_id, lender_id, nickname, last4, statement_day, due_day, grace_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO cards (id, user_id, lender_id, nickname, last4, holder_name, statement_day, due_day, grace_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
   )
-    .bind(id, userId, input.lenderId ?? null, input.nickname, input.last4 ?? null, input.statementDay, input.dueDay ?? null, input.graceDays ?? null)
+    .bind(id, userId, input.lenderId ?? null, input.nickname, input.last4 ?? null, input.holderName, input.statementDay, input.dueDay ?? null, input.graceDays ?? null)
     .run();
   const row = await c.env.DB.prepare("SELECT * FROM cards WHERE id = ?").bind(id).first<Row>();
   return c.json(cardFromRow(row!), 201);
@@ -77,9 +77,9 @@ cardRoutes.put("/:id", async (c) => {
   const input = cardInputSchema.parse(await c.req.json());
   await assertLender(c.env.DB, userId, input.lenderId);
   const res = await c.env.DB.prepare(
-    "UPDATE cards SET lender_id = ?, nickname = ?, last4 = ?, statement_day = ?, due_day = ?, grace_days = ? WHERE id = ? AND user_id = ?",
+    "UPDATE cards SET lender_id = ?, nickname = ?, last4 = ?, holder_name = ?, statement_day = ?, due_day = ?, grace_days = ? WHERE id = ? AND user_id = ?",
   )
-    .bind(input.lenderId ?? null, input.nickname, input.last4 ?? null, input.statementDay, input.dueDay ?? null, input.graceDays ?? null, id, userId)
+    .bind(input.lenderId ?? null, input.nickname, input.last4 ?? null, input.holderName, input.statementDay, input.dueDay ?? null, input.graceDays ?? null, id, userId)
     .run();
   if (!res.meta.changes) throw notFound("card_not_found");
   const card = cardFromRow((await c.env.DB.prepare("SELECT * FROM cards WHERE id = ?").bind(id).first<Row>())!);

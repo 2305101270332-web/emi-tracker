@@ -14,6 +14,7 @@ function CardDialog({ card, onClose }: { card: Card | null; onClose: () => void 
   const [nickname, setNickname] = useState(card?.nickname ?? "");
   const [lenderId, setLenderId] = useState(card?.lenderId ?? "");
   const [last4, setLast4] = useState(card?.last4 ?? "");
+  const [holderName, setHolderName] = useState(card?.holderName ?? "");
   const [statementDay, setStatementDay] = useState(String(card?.statementDay ?? ""));
   const [mode, setMode] = useState<"due" | "grace">(card?.graceDays ? "grace" : "due");
   const [dueDay, setDueDay] = useState(String(card?.dueDay ?? ""));
@@ -26,6 +27,7 @@ function CardDialog({ card, onClose }: { card: Card | null; onClose: () => void 
       nickname,
       lenderId: lenderId || null,
       last4: last4 || null,
+      holderName,
       statementDay: Number(statementDay),
       dueDay: mode === "due" ? Number(dueDay) : null,
       graceDays: mode === "grace" ? Number(graceDays) : null,
@@ -47,6 +49,7 @@ function CardDialog({ card, onClose }: { card: Card | null; onClose: () => void 
     <Dialog open onClose={onClose} title={card ? t("common.edit") : t("cards.add")}>
       <form onSubmit={(e) => void submit(e)} className="space-y-4" noValidate>
         <TextField label={t("cards.nickname")} value={nickname} onChange={(e) => setNickname(e.target.value)} required maxLength={60} />
+        <TextField label={t("cards.holderName")} hint={t("cards.holderHint")} value={holderName} onChange={(e) => setHolderName(e.target.value)} maxLength={60} autoComplete="off" />
         <SelectField label={t("form.lender")} value={lenderId} onChange={(e) => setLenderId(e.target.value)}>
           <option value="">—</option>
           {lenders.data?.map((l) => (
@@ -141,6 +144,7 @@ export function Cards() {
                     {lender && <LenderAvatar lender={lender} size={28} />}
                   </div>
                   <p className="mt-6 font-mono tracking-widest">•••• {c.last4 ?? "····"}</p>
+                  {c.holderName && <p className="mt-1 truncate text-xs font-semibold uppercase tracking-wider opacity-90">{t("cards.holderBadge", { name: c.holderName })}</p>}
                 </div>
                 <div className="flex items-center justify-between gap-2 p-4">
                   <p className="text-sm text-muted">

@@ -75,6 +75,7 @@ export function cardFromRow(r: Row): Card {
     nickname: String(r.nickname),
     lenderId: str(r.lender_id),
     last4: str(r.last4),
+    holderName: str(r.holder_name),
     statementDay: num(r.statement_day),
     dueDay: r.due_day === null ? null : num(r.due_day),
     graceDays: r.grace_days === null ? null : num(r.grace_days),

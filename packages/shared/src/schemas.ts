@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isValidISODate } from "@emi/core";
-import { DATE_FORMATS, LOAN_TYPES, TAX_LABELS } from "./constants";
+import { DATE_FORMATS, EXPENSE_CATEGORIES, EXPENSE_FREQUENCIES, LOAN_TYPES, TAX_LABELS } from "./constants";
 
 /** All money crossing the wire is an integer in the currency's minor unit. */
 export const minor = z.number().int().safe();
@@ -71,12 +71,31 @@ export const cardInputSchema = z
     nickname: shortText(60).min(1),
     lenderId: id.nullable().optional(),
     last4: z.string().regex(/^\d{4}$/).nullable().optional(),
+    /** Name printed on the card when it isn't the user's own (blank = own card). */
+    holderName: shortText(60)
+      .nullable()
+      .optional()
+      .transform((v) => v || null),
     statementDay: z.number().int().min(1).max(31),
     dueDay: z.number().int().min(1).max(31).nullable().optional(),
     graceDays: z.number().int().min(1).max(60).nullable().optional(),
   })
   .refine((c) => !!c.dueDay !== !!c.graceDays, { message: "due_day_or_grace_days", path: ["dueDay"] });
 export type CardInput = z.infer<typeof cardInputSchema>;
+export type CardInputRaw = z.input<typeof cardInputSchema>;
+
+// ---- Fixed expenses -----------------------------------------------------------------------
+export const expenseInputSchema = z.object({
+  name: shortText(60).min(1),
+  category: z.enum(EXPENSE_CATEGORIES),
+  /** Minor units, charged once per `frequency`. */
+  amount: minor.positive().max(1e14),
+  currency: currencyCode,
+  frequency: z.enum(EXPENSE_FREQUENCIES).default("monthly"),
+  active: z.boolean().default(true),
+});
+export type ExpenseInput = z.infer<typeof expenseInputSchema>;
+export type ExpenseInputRaw = z.input<typeof expenseInputSchema>;
 
 // ---- Loans ------------------------------------------------------------------------------
 export const feeSchema = z.discriminatedUnion("kind", [
