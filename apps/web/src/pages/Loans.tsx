@@ -1,5 +1,5 @@
 import { useMemo, useState, type CSSProperties } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { BellOff, CreditCard, Plus, UserRound, Users } from "lucide-react";
 import { useFormat } from "../lib/format";
@@ -7,6 +7,8 @@ import { splitAmount, type CardSnapshot, type LoanListItem } from "@emi/shared";
 import { useLenders, useLoans, useSharedLoans } from "../lib/queries";
 import { ErrorState, LenderAvatar, PageHeader, ProgressBar, SelectField, Spinner, cx } from "../components/ui";
 import { LOAN_SORTS, readLoanSort, saveLoanSort, sortLoans, type LoanSort } from "../lib/sort-loans";
+import { FILTER_KEYS, activeFilters, filterLoans, filterOptions, readFilters, type LoanFilters } from "../lib/filter-loans";
+import { LoanFilterBar } from "../components/LoanFilters";
 
 /** Which card a card EMI is on, and whose name is on it when it isn't the user's own. */
 export function CardLine({ card, className }: { card: CardSnapshot; className?: string }) {
@@ -42,8 +44,32 @@ export function Loans() {
     setSort(next);
     saveLoanSort(next);
   };
-  const mine = useMemo(() => sortLoans(loans.data ?? [], sort), [loans.data, sort]);
-  const sharedList = useMemo(() => sortLoans(shared.data ?? [], sort), [shared.data, sort]);
+  const [params, setParams] = useSearchParams();
+  const filters = useMemo(() => readFilters(params), [params]);
+  const today = f.today();
+  const allMine = useMemo(() => sortLoans(loans.data ?? [], sort), [loans.data, sort]);
+  const allShared = useMemo(() => sortLoans(shared.data ?? [], sort), [shared.data, sort]);
+  const options = useMemo(() => filterOptions([...allMine, ...allShared]), [allMine, allShared]);
+  const mine = useMemo(() => filterLoans(allMine, filters, today), [allMine, filters, today]);
+  const sharedList = useMemo(() => filterLoans(allShared, filters, today), [allShared, filters, today]);
+  const total = allMine.length + allShared.length;
+  const filtering = activeFilters(filters).length > 0;
+
+  const setFilter = (key: keyof LoanFilters, value: string) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    if (key === "due" && value !== "range") {
+      next.delete("from");
+      next.delete("to");
+    }
+    setParams(next, { replace: true });
+  };
+  const clearFilters = () => {
+    const next = new URLSearchParams(params);
+    for (const k of FILTER_KEYS) next.delete(k);
+    setParams(next, { replace: true });
+  };
 
   const add = (
     <>
@@ -127,22 +153,41 @@ export function Loans() {
   return (
     <>
       <PageHeader title={t("loans.title")} actions={add} />
-      {mine.length + sharedList.length > 1 && (
-        <div className="mb-4 flex justify-end">
-          <SelectField label={t("loans.sortBy")} value={sort} onChange={(e) => changeSort(e.target.value as LoanSort)} className="w-full sm:w-64">
-            {LOAN_SORTS.map((k) => (
-              <option key={k} value={k}>
-                {t(`loans.sort.${k}`)}
-              </option>
-            ))}
-          </SelectField>
-        </div>
+      {total > 1 && (
+        <LoanFilterBar
+          filters={filters}
+          options={options}
+          onChange={setFilter}
+          onClear={clearFilters}
+          shown={mine.length + sharedList.length}
+          total={total}
+          sort={
+            <SelectField label={t("loans.sortBy")} value={sort} onChange={(e) => changeSort(e.target.value as LoanSort)}>
+              {LOAN_SORTS.map((k) => (
+                <option key={k} value={k}>
+                  {t(`loans.sort.${k}`)}
+                </option>
+              ))}
+            </SelectField>
+          }
+        />
       )}
-      {sharedList.length > 0 && <h2 className="mb-3 text-lg font-semibold text-primary-strong">{t("loans.myLoans")}</h2>}
-      {mine.length === 0 ? (
-        <div className="card p-10 text-center text-muted">{t("loans.empty")}</div>
+      {filtering && mine.length + sharedList.length === 0 ? (
+        <div className="card flex flex-col items-center gap-3 p-10 text-center text-muted">
+          {t("loans.filters.noMatch")}
+          <button type="button" className="btn-secondary" onClick={clearFilters}>
+            {t("loans.filters.clear")}
+          </button>
+        </div>
       ) : (
-        <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{mine.map(card)}</ul>
+        <>
+          {sharedList.length > 0 && mine.length > 0 && <h2 className="mb-3 text-lg font-semibold text-primary-strong">{t("loans.myLoans")}</h2>}
+          {allMine.length === 0 ? (
+            <div className="card p-10 text-center text-muted">{t("loans.empty")}</div>
+          ) : (
+            mine.length > 0 && <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{mine.map(card)}</ul>
+          )}
+        </>
       )}
       {sharedList.length > 0 && (
         <section className="mt-8" aria-labelledby="shared-heading">

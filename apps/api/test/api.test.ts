@@ -215,6 +215,19 @@ describe("loans", () => {
     expect(d.json.activeLoans).toBe(2);
   });
 
+  it("dashboard splits this month into paid and still to pay", async () => {
+    const today = todayInZone("Asia/Kolkata");
+    const terms = loan({ bookingDate: addMonthsClamped(today, -1), firstEmiDate: today, emiDay: Number(today.slice(8)) });
+    const a = await c.post("/loans", terms);
+    await c.post("/loans", { ...terms, principal: 50_000_00 });
+    const first = a.json.instalments[0];
+    await c.post(`/instalments/${first.id}/payment`, { paidDate: today, amountPaid: first.totalPayable });
+    const d = (await c.get("/dashboard")).json;
+    expect(d.paidThisMonth).toEqual({ INR: first.totalPayable });
+    expect(d.stillToPayThisMonth.INR).toBe(d.payableThisMonth.INR - first.totalPayable);
+    expect(d.stillToPayThisMonth.INR).toBeGreaterThan(0);
+  });
+
   it("calendar range lists instalments with billed and payable dates", async () => {
     await c.post("/loans", loan());
     const res = await c.get("/instalments?from=2025-02-01&to=2025-04-30");

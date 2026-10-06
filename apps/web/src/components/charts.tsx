@@ -322,3 +322,138 @@ export function BalanceChart({ points, currency, label }: { points: { date: stri
     </figure>
   );
 }
+
+/**
+ * Monthly cash flow: stacked bars of EMIs (bottom) + fixed costs (top), a solid income line and a
+ * dashed "breathing room" line at income − target. Bars under the dashed line leave enough over.
+ */
+export function CashflowChart({
+  months,
+  income,
+  target,
+  currency,
+  from,
+}: {
+  months: { month: string; emis: number; expenses: number; left: number }[];
+  income: number;
+  target: number;
+  currency: string;
+  /** Index of the first breathing-room month, marked on the chart. */
+  from: number | null;
+}) {
+  const { t } = useTranslation();
+  const f = useFormat();
+  const titleId = useId();
+  const [ref, width] = useWidth<HTMLDivElement>();
+  const [active, setActive] = useState<number | null>(null);
+  if (!months.length) return null;
+
+  const OK = "rgb(var(--success))";
+  const max = Math.max(income, ...months.map((m) => m.emis + m.expenses));
+  const ticks = niceTicks(max);
+  const top = ticks[ticks.length - 1]!;
+  const plotW = width - PAD.left - PAD.right;
+  const plotH = HEIGHT - PAD.top - PAD.bottom;
+  const slot = plotW / months.length;
+  const barW = Math.max(2, Math.min(28, slot * 0.7));
+  const y = (v: number) => PAD.top + plotH - (Math.max(0, v) / top) * plotH;
+  const monthLabel = (ym: string) => f.monthLabel(`${ym}-01`);
+  const axisFmt = new Intl.DateTimeFormat(f.locale, { month: "short", year: "2-digit", timeZone: "UTC" });
+  const axisLabel = (ym: string) => axisFmt.format(new Date(`${ym}-01T00:00:00Z`));
+  const labelEvery = Math.ceil(months.length / Math.max(1, Math.floor(plotW / 52)));
+  const m = (v: number) => f.money(v, currency);
+  const line = income - target;
+
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "ArrowRight") setActive((a) => Math.min(months.length - 1, (a ?? -1) + 1));
+    else if (e.key === "ArrowLeft") setActive((a) => Math.max(0, (a ?? months.length) - 1));
+    else if (e.key === "Escape") setActive(null);
+    else return;
+    e.preventDefault();
+  };
+  const a = active !== null ? months[active] : undefined;
+
+  return (
+    <figure aria-labelledby={titleId}>
+      <figcaption id={titleId} className="sr-only">
+        {t("charts.cashflow")}
+      </figcaption>
+      <Legend
+        items={[
+          { label: t("charts.emis"), color: C1 },
+          { label: t("charts.fixedCosts"), color: C2 },
+          { label: t("charts.income"), color: "rgb(var(--fg))" },
+          { label: t("charts.breathingLine"), color: OK },
+        ]}
+      />
+      <div ref={ref} className="relative">
+        <svg
+          width={width}
+          height={HEIGHT}
+          role="img"
+          aria-label={`${t("charts.cashflow")}. ${t("charts.cashflowDesc")}`}
+          tabIndex={0}
+          onKeyDown={onKey}
+          onBlur={() => setActive(null)}
+          onMouseLeave={() => setActive(null)}
+          className="block rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+        >
+          {ticks.map((tk) => (
+            <g key={tk}>
+              <line x1={PAD.left} x2={width - PAD.right} y1={y(tk)} y2={y(tk)} stroke={GRID} strokeWidth={1} />
+              <text x={PAD.left - 6} y={y(tk)} dy="0.32em" textAnchor="end" className="fill-muted text-[10px]">
+                {f.moneyShort(tk, currency)}
+              </text>
+            </g>
+          ))}
+          {from !== null && from > 0 && (
+            <rect x={PAD.left + slot * from} y={PAD.top} width={plotW - slot * from} height={plotH} fill={OK} opacity={0.08} />
+          )}
+          {months.map((mo, i) => {
+            const cx0 = PAD.left + slot * i + slot / 2;
+            const eTop = y(mo.emis);
+            const xTop = y(mo.emis + mo.expenses);
+            const gap = mo.emis > 0 && mo.expenses > 0 ? 1 : 0;
+            return (
+              <g key={mo.month} onMouseEnter={() => setActive(i)} opacity={active === null || active === i ? 1 : 0.55}>
+                <rect x={PAD.left + slot * i} y={PAD.top} width={slot} height={plotH} fill="transparent" />
+                {mo.emis > 0 && <rect x={cx0 - barW / 2} y={eTop} width={barW} height={Math.max(0, y(0) - eTop)} fill={C1} />}
+                {mo.expenses > 0 && <path d={roundedTop(cx0 - barW / 2, xTop, barW, Math.max(0, eTop - xTop - gap), 3)} fill={C2} />}
+                {i % labelEvery === 0 && (
+                  <text x={cx0} y={HEIGHT - 8} textAnchor="middle" className="fill-muted text-[10px]">
+                    {axisLabel(mo.month)}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+          <line x1={PAD.left} x2={width - PAD.right} y1={y(income)} y2={y(income)} stroke="rgb(var(--fg))" strokeWidth={2} />
+          {line > 0 && <line x1={PAD.left} x2={width - PAD.right} y1={y(line)} y2={y(line)} stroke={OK} strokeWidth={2} strokeDasharray="6 4" />}
+          <line x1={PAD.left} x2={width - PAD.right} y1={y(0)} y2={y(0)} stroke="rgb(var(--muted))" strokeWidth={1} />
+        </svg>
+        {a && (
+          <Tooltip x={PAD.left + slot * active! + slot / 2} y={y(Math.max(a.emis + a.expenses, income))} width={width}>
+            <p className="mb-1 font-semibold">{monthLabel(a.month)}</p>
+            <p className="flex justify-between gap-2">
+              <span>{t("charts.emis")}</span>
+              <span className="num">{m(a.emis)}</span>
+            </p>
+            <p className="flex justify-between gap-2">
+              <span>{t("charts.fixedCosts")}</span>
+              <span className="num">{m(a.expenses)}</span>
+            </p>
+            <p className={cx("flex justify-between gap-2 font-semibold", a.left >= target ? "text-success" : a.left < 0 ? "text-danger" : "")}>
+              <span>{t("charts.left")}</span>
+              <span className="num">{m(a.left)}</span>
+            </p>
+          </Tooltip>
+        )}
+      </div>
+      <DataTable
+        caption={t("charts.cashflow")}
+        headers={[t("charts.month"), t("charts.emis"), t("charts.fixedCosts"), t("charts.left")]}
+        rows={months.map((mo) => [monthLabel(mo.month), m(mo.emis), m(mo.expenses), m(mo.left)])}
+      />
+    </figure>
+  );
+}

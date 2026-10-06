@@ -170,6 +170,9 @@ export interface PayByGroup {
 export interface Dashboard {
   today: string;
   payableThisMonth: MoneyByCurrency;
+  /** This month's instalments not paid yet (skipped excluded): payableThisMonth − paidThisMonth. */
+  stillToPayThisMonth: MoneyByCurrency;
+  paidThisMonth: MoneyByCurrency;
   next7Days: MoneyByCurrency;
   next30Days: MoneyByCurrency;
   overdue: MoneyByCurrency;

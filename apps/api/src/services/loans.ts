@@ -492,6 +492,8 @@ export async function getDashboard(db: D1Database, userId: string): Promise<Dash
   return {
     today,
     payableThisMonth: totalsByCurrency(inMonth.filter((i) => i.status !== "skipped"), cur, amount),
+    stillToPayThisMonth: totalsByCurrency(inMonth.filter((i) => i.status !== "skipped" && i.status !== "paid"), cur, amount),
+    paidThisMonth: totalsByCurrency(inMonth.filter((i) => i.status === "paid"), cur, amount),
     next7Days: totalsByCurrency(unpaid.filter((i) => i.payableDate >= today && i.payableDate <= addDays(today, 7)), cur, amount),
     next30Days: totalsByCurrency(unpaid.filter((i) => i.payableDate >= today && i.payableDate <= horizon), cur, amount),
     overdue: totalsByCurrency(unpaid.filter((i) => i.status === "overdue"), cur, amount),

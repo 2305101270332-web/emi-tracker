@@ -25,6 +25,8 @@ const item = (id: string, loan: string, amount: number, currency = "INR", cardId
 const dashboard: Dashboard = {
   today: "2025-06-28",
   payableThisMonth: { INR: 1_23_456_78, USD: 100_00 },
+  stillToPayThisMonth: { INR: 1_00_000_00, USD: 100_00 },
+  paidThisMonth: { INR: 23_456_78 },
   next7Days: { INR: 50_000_00 },
   next30Days: { INR: 75_000_00, USD: 100_00 },
   overdue: {},
@@ -89,6 +91,10 @@ describe("app shell", () => {
     const tile = screen.getByText(en.dashboard.payableThisMonth).closest("div.card") as HTMLElement;
     expect(within(tile).getByText("₹1,23,456.78")).toBeInTheDocument();
     expect(within(tile).getByText("$100.00")).toBeInTheDocument();
+    const still = screen.getByText(en.dashboard.stillToPay).closest("div.card") as HTMLElement;
+    expect(within(still).getByText("₹1,00,000.00")).toBeInTheDocument();
+    expect(within(still).getByText("₹23,456.78 of ₹1,23,456.78 paid")).toBeInTheDocument();
+    expect(within(still).getByText("$0.00 of $100.00 paid")).toBeInTheDocument();
     expect(screen.getByText("2 EMIs on Regalia")).toBeInTheDocument();
     expect(screen.getByText("₹30,000.00")).toBeInTheDocument();
     // Two navigation landmarks (sidebar + bottom bar) with accessible names

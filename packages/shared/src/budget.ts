@@ -60,3 +60,83 @@ export function summarizeBudget(opts: {
   const first = opts.income?.currency;
   return [...rows.values()].sort((a, b) => Number(b.currency === first) - Number(a.currency === first) || a.currency.localeCompare(b.currency));
 }
+
+export interface CashflowMonth {
+  /** YYYY-MM */
+  month: string;
+  /** The user's share of EMIs payable that month. */
+  emis: Minor;
+  expenses: Minor;
+  outgo: Minor;
+  /** income − outgo */
+  left: Minor;
+}
+
+export interface LoanEnding {
+  loanId: string;
+  name: string;
+  /** YYYY-MM of the loan's last instalment. */
+  month: string;
+  /** The user's share of the loan's regular EMI, no longer payable after `month`. */
+  frees: Minor;
+}
+
+const nextMonth = (ym: string) => {
+  const [y, m] = ym.split("-").map(Number) as [number, number];
+  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
+};
+
+/**
+ * Month-by-month cash flow in one currency, assuming income and fixed expenses stay as they
+ * are and EMIs are paid as scheduled. `dues` should cover `months` months from `startMonth`.
+ */
+export function projectCashflow(opts: {
+  currency: string;
+  income: Minor;
+  startMonth: string;
+  months: number;
+  dues: readonly UpcomingItem[];
+  expenses: readonly Expense[];
+  splits?: Readonly<Record<string, readonly LoanSplit[]>>;
+}): { months: CashflowMonth[]; endings: LoanEnding[] } {
+  const expenses = opts.expenses
+    .filter((e) => e.active && e.currency === opts.currency)
+    .reduce((s, e) => s + monthlyEquivalent(e.amount, e.frequency), 0);
+  const list: string[] = [];
+  for (let m = opts.startMonth, i = 0; i < opts.months; i++, m = nextMonth(m)) list.push(m);
+  const last = list[list.length - 1] ?? opts.startMonth;
+
+  const emis = new Map<string, Minor>();
+  const loans = new Map<string, { name: string; last: string; first: Minor }>();
+  for (const d of opts.dues) {
+    if (d.currency !== opts.currency || d.status === "skipped") continue;
+    const month = d.payableDate.slice(0, 7);
+    if (month < opts.startMonth || month > last) continue;
+    const mine = splitAmount(d.amount, opts.splits?.[d.loanId]).mine;
+    emis.set(month, (emis.get(month) ?? 0) + mine);
+    const l = loans.get(d.loanId);
+    if (!l) loans.set(d.loanId, { name: d.loanNickname, last: month, first: mine });
+    else if (month > l.last) l.last = month;
+  }
+
+  const months = list.map((month) => {
+    const e = emis.get(month) ?? 0;
+    return { month, emis: e, expenses, outgo: e + expenses, left: opts.income - e - expenses };
+  });
+  // A loan whose dues run to the end of the window may well continue past it: not an ending.
+  const endings = [...loans]
+    .filter(([, l]) => l.last < last)
+    .map(([loanId, l]) => ({ loanId, name: l.name, month: l.last, frees: l.first }))
+    .sort((a, b) => a.month.localeCompare(b.month) || a.name.localeCompare(b.name));
+  return { months, endings };
+}
+
+/** Index of the first month from which `left` stays at or above `target` for good; null if never. */
+export function breathingRoomFrom(months: readonly CashflowMonth[], target: Minor): number | null {
+  let from: number | null = null;
+  months.forEach((m, i) => {
+    if (m.left < target) from = null;
+    else if (from === null) from = i;
+  });
+  return from;
+}

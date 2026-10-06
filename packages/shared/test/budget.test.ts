@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cardInputSchema, expenseInputSchema, loanInputSchema, monthlyEquivalent, splitAmount, summarizeBudget, type Expense, type UpcomingItem } from "../src";
+import { breathingRoomFrom, cardInputSchema, expenseInputSchema, loanInputSchema, monthlyEquivalent, projectCashflow, splitAmount, summarizeBudget, type Expense, type UpcomingItem } from "../src";
 
 const exp = (over: Partial<Expense>): Expense => ({
   id: "e",
@@ -114,5 +114,41 @@ describe("loan schema: splits and pre-closure charge", () => {
   it("accepts a flat or percent pre-closure charge", () => {
     expect(loanInputSchema.parse({ ...loan, prepaymentCharge: { kind: "flat", amount: 500_00 }, prepaymentChargeTaxRate: 18 }).prepaymentCharge).toEqual({ kind: "flat", amount: 500_00 });
     expect(loanInputSchema.safeParse({ ...loan, prepaymentCharge: { kind: "percent", percent: 120 } }).success).toBe(false);
+  });
+});
+
+describe("projectCashflow / breathingRoomFrom", () => {
+  const d = (loanId: string, payableDate: string, amount: number, extra: Partial<UpcomingItem> = {}) =>
+    ({ loanId, loanNickname: loanId, payableDate, amount, currency: "INR", status: "upcoming", ...extra }) as UpcomingItem;
+  // Phone: 3 months of 10,000. Car: 6 months of 20,000 (runs to the window end). Gym 2,000/month.
+  const dues = [
+    ...["2026-10-05", "2026-11-05", "2026-12-05"].map((p) => d("Phone", p, 10_000_00)),
+    ...["2026-10-10", "2026-11-10", "2026-12-10", "2027-01-10", "2027-02-10", "2027-03-10"].map((p) => d("Car", p, 20_000_00)),
+    d("Usd", "2026-10-01", 99_00, { currency: "USD" }),
+    d("Skipped", "2026-10-01", 5_000_00, { status: "skipped" }),
+  ];
+  const run = (extra: Partial<Parameters<typeof projectCashflow>[0]> = {}) =>
+    projectCashflow({ currency: "INR", income: 50_000_00, startMonth: "2026-10", months: 6, dues, expenses: [exp({})], ...extra });
+
+  it("projects what is left each month and when loans end", () => {
+    const { months, endings } = run();
+    expect(months.map((m) => m.left)).toEqual([18_000_00, 18_000_00, 18_000_00, 28_000_00, 28_000_00, 28_000_00]);
+    expect(months[0]).toMatchObject({ month: "2026-10", emis: 30_000_00, expenses: 2_000_00, outgo: 32_000_00 });
+    expect(endings).toEqual([{ loanId: "Phone", name: "Phone", month: "2026-12", frees: 10_000_00 }]); // Car runs past the window
+  });
+
+  it("uses only the user's share of split loans", () => {
+    const { months } = run({ splits: { Car: [{ name: "Priya", kind: "percent", percent: 50 }] } });
+    expect(months[0]!.emis).toBe(20_000_00);
+  });
+
+  it("finds the first month that stays above the target", () => {
+    const { months } = run();
+    expect(breathingRoomFrom(months, 25_000_00)).toBe(3); // Jan 2027
+    expect(breathingRoomFrom(months, 10_000_00)).toBe(0); // already there
+    expect(breathingRoomFrom(months, 30_000_00)).toBeNull();
+    // A later dip below the target resets it.
+    const dip = months.map((m, i) => (i === 4 ? { ...m, left: 0 } : m));
+    expect(breathingRoomFrom(dip, 25_000_00)).toBe(5);
   });
 });

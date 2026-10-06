@@ -5,7 +5,38 @@ import type { Dashboard as DashboardData, Lender, PayByGroup } from "@emi/shared
 import { currencyEntries, useFormat } from "../lib/format";
 import { useCards, useDashboard, useLenders, useMe } from "../lib/queries";
 import { BalanceChart } from "../components/charts";
-import { ErrorState, LenderAvatar, MoneyLines, PageHeader, Section, Spinner, StatusBadge, cx } from "../components/ui";
+import { ErrorState, LenderAvatar, MoneyLines, PageHeader, ProgressBar, Section, Spinner, StatusBadge, cx } from "../components/ui";
+
+/** What is left to pay this month, with how much of the month is already paid (per currency). */
+function StillToPayTile({ still, paid, total, index }: { still: Record<string, number>; paid: Record<string, number>; total: Record<string, number>; index: number }) {
+  const { t } = useTranslation();
+  const f = useFormat();
+  const currencies = currencyEntries(total).map(([c]) => c);
+  return (
+    <div style={{ "--i": index } as React.CSSProperties} className="card animate-rise p-4">
+      <div className="flex items-center gap-2 text-sm font-medium text-muted">
+        <Wallet size={16} aria-hidden /> {t("dashboard.stillToPay")}
+      </div>
+      {currencies.length === 0 ? (
+        <p className="mt-2 text-xl font-bold">—</p>
+      ) : (
+        <ul className="mt-2 space-y-2">
+          {currencies.map((c) => {
+            const left = still[c] ?? 0;
+            const done = paid[c] ?? 0;
+            return (
+              <li key={c}>
+                <p className={cx("num text-xl font-bold", left === 0 && "text-success")}>{left === 0 ? t("dashboard.allPaid") : f.money(left, c)}</p>
+                <ProgressBar value={total[c] ? done / total[c]! : 0} label={t("dashboard.paidOf", { paid: f.money(done, c), total: f.money(total[c] ?? 0, c) })} />
+                <p className="mt-1 text-xs text-muted">{t("dashboard.paidOf", { paid: f.money(done, c), total: f.money(total[c] ?? 0, c) })}</p>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 function Tile({ label, totals, tone = "default", icon, index = 0 }: { label: string; totals: Record<string, number>; tone?: "default" | "accent" | "warn"; icon?: React.ReactNode; index?: number }) {
   const f = useFormat();
@@ -201,12 +232,14 @@ export function Dashboard() {
   return (
     <>
       <PageHeader title={t("dashboard.greeting", { name: firstName })} actions={addBtn} />
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         <Tile label={t("dashboard.payableThisMonth")} totals={d.payableThisMonth} tone="accent" icon={<CalendarClock size={16} aria-hidden />} />
-        <Tile label={t("dashboard.next7")} totals={d.next7Days} index={1} />
-        <Tile label={t("dashboard.next30")} totals={d.next30Days} index={2} />
-        <Tile label={t("dashboard.overdue")} totals={d.overdue} tone="warn" icon={<AlertTriangle size={16} aria-hidden />} index={3} />
-        <Tile label={t("dashboard.outstanding")} totals={d.outstanding} index={4} />
+        {/* Older cached dashboards (offline) don't have the paid / still-to-pay split. */}
+        <StillToPayTile still={d.stillToPayThisMonth ?? d.payableThisMonth} paid={d.paidThisMonth ?? {}} total={d.payableThisMonth} index={1} />
+        <Tile label={t("dashboard.next7")} totals={d.next7Days} index={2} />
+        <Tile label={t("dashboard.next30")} totals={d.next30Days} index={3} />
+        <Tile label={t("dashboard.overdue")} totals={d.overdue} tone="warn" icon={<AlertTriangle size={16} aria-hidden />} index={4} />
+        <Tile label={t("dashboard.outstanding")} totals={d.outstanding} index={5} />
       </div>
       <p className="mt-2 text-xs text-muted">{t("dashboard.perCurrencyNote")}</p>
 

@@ -19,6 +19,7 @@ import {
 import { errorMessage } from "../lib/api";
 import { useFormat } from "../lib/format";
 import { useDeleteExpense, useExpenses, useInstalments, useLoans, useMe, useSaveExpense } from "../lib/queries";
+import { BreathingRoom } from "../components/BreathingRoom";
 import { Dialog, ErrorState, PageHeader, Section, SelectField, Spinner, StatusBadge, TextField, Toggle, cx } from "../components/ui";
 
 const PRESETS: { key: string; category: ExpenseCategory; frequency?: ExpenseFrequency }[] = [
@@ -33,6 +34,8 @@ const PRESETS: { key: string; category: ExpenseCategory; frequency?: ExpenseFreq
   { key: "fuel", category: "transport" },
   { key: "insurance", category: "insurance", frequency: "yearly" },
 ];
+
+const NO_EXPENSES: Expense[] = [];
 
 type Draft = { expense?: Expense; name?: string; category?: ExpenseCategory; frequency?: ExpenseFrequency };
 
@@ -179,12 +182,17 @@ export function Budget() {
   const [error, setError] = useState<string | null>(null);
 
   const settings = me.data?.settings;
-  const income = settings?.monthlyIncome != null && settings.incomeCurrency ? { amount: settings.monthlyIncome, currency: settings.incomeCurrency } : null;
+  const incomeAmount = settings?.monthlyIncome ?? null;
+  const incomeCurrency = settings?.incomeCurrency ?? null;
+  const income = useMemo(
+    () => (incomeAmount !== null && incomeCurrency ? { amount: incomeAmount, currency: incomeCurrency } : null),
+    [incomeAmount, incomeCurrency],
+  );
   // Only the user's share of split loans counts towards their budget.
   const splits = useMemo(() => Object.fromEntries((loans.data ?? []).filter((l) => l.splits.length).map((l) => [l.id, l.splits])), [loans.data]);
   const rows = useMemo(
     () => summarizeBudget({ expenses: expenses.data ?? [], dues: dues.data ?? [], income, splits }),
-    [expenses.data, dues.data, income?.amount, income?.currency, splits], // eslint-disable-line react-hooks/exhaustive-deps
+    [expenses.data, dues.data, income, splits],
   );
   const byCategory = useMemo(() => {
     const groups = new Map<ExpenseCategory, Expense[]>();
@@ -258,6 +266,10 @@ export function Budget() {
           </p>
         )}
         {rows.length > 1 && <p className="text-xs text-muted">{t("dashboard.perCurrencyNote")}</p>}
+      </div>
+
+      <div className="mt-6">
+        <BreathingRoom income={income} expenses={expenses.data ?? NO_EXPENSES} splits={splits} />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">

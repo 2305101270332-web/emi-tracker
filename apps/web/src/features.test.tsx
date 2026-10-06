@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { addDays, addMonthsClamped, todayInZone } from "@emi/core";
 import { en, type Me } from "@emi/shared";
 import { AppRoutes } from "./App";
 
@@ -243,5 +244,56 @@ describe("card line", () => {
     const cardName = screen.getByText(/Regalia ••4321/);
     expect(holder.closest("p")).not.toBe(cardName.closest("p"));
     expect(holder.closest("p")).toHaveAttribute("title", "Name on card: Ravi Rao");
+  });
+});
+
+describe("loan filters", () => {
+  it("filters by a specific card, shows chips and clears", async () => {
+    mockApi({ ...base, "/loans": [cardEmi, personal] });
+    renderAt("/loans");
+    fireEvent.click(await screen.findByRole("button", { name: en.loans.filters.button }));
+    fireEvent.click(screen.getByRole("combobox", { name: en.loans.filters.card }));
+    fireEvent.click(screen.getByRole("option", { name: "Regalia ••4321" }));
+    expect(await screen.findByText("Showing 1 of 2 loans")).toBeInTheDocument();
+    expect(screen.queryByText("Personal")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove filter: Card: Regalia ••4321" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: en.loans.filters.clear }));
+    expect(await screen.findByText("Personal")).toBeInTheDocument();
+  });
+
+  it("reads filters from the URL and explains when nothing matches", async () => {
+    mockApi({ ...base, "/loans": [cardEmi, personal] });
+    renderAt("/loans?due=overdue");
+    expect(await screen.findByText(en.loans.filters.noMatch)).toBeInTheDocument();
+  });
+
+  it("searches by name on card", async () => {
+    mockApi({ ...base, "/loans": [cardEmi, personal] });
+    renderAt("/loans");
+    fireEvent.change(await screen.findByLabelText(en.loans.filters.search), { target: { value: "ravi" } });
+    expect(await screen.findByText("Showing 1 of 2 loans")).toBeInTheDocument();
+    expect(screen.getByText("Phone EMI")).toBeInTheDocument();
+  });
+});
+
+describe("breathing room", () => {
+  it("says from which month money is left over and which loans end", async () => {
+    const start = todayInZone("Asia/Kolkata").slice(0, 8) + "01";
+    const month = (n: number) => addMonthsClamped(start, n, 1);
+    // ₹1,70,000 of EMIs for 3 months, then nothing. Income ₹2,00,000, gym ₹2,000 → ₹28,000 left, then ₹1,98,000.
+    const dues = [0, 1, 2].map((n) => ({ ...due(`p${n}`, 1_70_000_00, "upcoming"), payableDate: addDays(month(n), 4), loanNickname: "Phone EMI" }));
+    mockApi({ ...base, "/loans": [cardEmi], "/instalments": dues, "/expenses": [expense("e1", "Gym", 2_000_00, "monthly")] });
+    renderAt("/budget");
+    const long = new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
+    const label = (iso: string) => long.format(new Date(`${iso}T00:00:00Z`));
+    expect(await screen.findByText(`Breathing room from ${label(month(3))}`)).toBeInTheDocument();
+    expect(screen.getByText(/That's 3 months away\./)).toBeInTheDocument();
+    expect(screen.getByText("Phone EMI ends")).toBeInTheDocument();
+    expect(screen.getByText("frees ₹1,70,000.00 / month")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /Monthly cash flow/ })).toBeInTheDocument();
+
+    // A lower target means there is already enough left over.
+    fireEvent.change(screen.getByLabelText(/Breathing room means at least/), { target: { value: "20000" } });
+    expect(await screen.findByText(en.budget.breathing.already)).toBeInTheDocument();
   });
 });
