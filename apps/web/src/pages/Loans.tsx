@@ -1,11 +1,12 @@
-import type { CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { BellOff, CreditCard, Plus } from "lucide-react";
 import { useFormat } from "../lib/format";
 import type { LoanListItem } from "@emi/shared";
 import { useLenders, useLoans, useSharedLoans } from "../lib/queries";
-import { ErrorState, LenderAvatar, PageHeader, ProgressBar, Spinner } from "../components/ui";
+import { ErrorState, LenderAvatar, PageHeader, ProgressBar, SelectField, Spinner } from "../components/ui";
+import { LOAN_SORTS, readLoanSort, saveLoanSort, sortLoans, type LoanSort } from "../lib/sort-loans";
 
 export function Loans() {
   const { t } = useTranslation();
@@ -14,6 +15,13 @@ export function Loans() {
   const lenders = useLenders();
   const shared = useSharedLoans();
   const lender = (id: string) => lenders.data?.find((l) => l.id === id);
+  const [sort, setSort] = useState<LoanSort>(readLoanSort);
+  const changeSort = (next: LoanSort) => {
+    setSort(next);
+    saveLoanSort(next);
+  };
+  const mine = useMemo(() => sortLoans(loans.data ?? [], sort), [loans.data, sort]);
+  const sharedList = useMemo(() => sortLoans(shared.data ?? [], sort), [shared.data, sort]);
 
   const add = (
     <>
@@ -81,15 +89,25 @@ export function Loans() {
     );
   };
 
-  const sharedList = shared.data ?? [];
   return (
     <>
       <PageHeader title={t("loans.title")} actions={add} />
+      {mine.length + sharedList.length > 1 && (
+        <div className="mb-4 flex justify-end">
+          <SelectField label={t("loans.sortBy")} value={sort} onChange={(e) => changeSort(e.target.value as LoanSort)} className="w-full sm:w-64">
+            {LOAN_SORTS.map((k) => (
+              <option key={k} value={k}>
+                {t(`loans.sort.${k}`)}
+              </option>
+            ))}
+          </SelectField>
+        </div>
+      )}
       {sharedList.length > 0 && <h2 className="mb-3 text-lg font-semibold text-primary-strong">{t("loans.myLoans")}</h2>}
-      {loans.data!.length === 0 ? (
+      {mine.length === 0 ? (
         <div className="card p-10 text-center text-muted">{t("loans.empty")}</div>
       ) : (
-        <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{loans.data!.map(card)}</ul>
+        <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{mine.map(card)}</ul>
       )}
       {sharedList.length > 0 && (
         <section className="mt-8" aria-labelledby="shared-heading">

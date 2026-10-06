@@ -117,6 +117,16 @@ export const en = {
     accessView: "View only",
     accessEdit: "Can edit",
     accessOwner: "Owner",
+    sortBy: "Sort by",
+    sort: {
+      newest: "Newest first",
+      nextDue: "Next due date",
+      name: "Name (A to Z)",
+      outstanding: "Outstanding (high to low)",
+      emi: "EMI (high to low)",
+      progress: "Most repaid",
+      rate: "Interest rate (high to low)",
+    },
     viewOnlyNotice: "{{name}} shared this loan with you as view only. You can't record payments or make changes.",
     editNotice: "{{name}} shared this loan with you. You can record payments and edit the schedule; only the owner can share or delete it.",
     types: {
