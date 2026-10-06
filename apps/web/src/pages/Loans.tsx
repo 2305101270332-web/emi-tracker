@@ -1,9 +1,9 @@
 import { useMemo, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { BellOff, CreditCard, Plus } from "lucide-react";
+import { BellOff, CreditCard, Plus, Users } from "lucide-react";
 import { useFormat } from "../lib/format";
-import type { CardSnapshot, LoanListItem } from "@emi/shared";
+import { splitAmount, type CardSnapshot, type LoanListItem } from "@emi/shared";
 import { useLenders, useLoans, useSharedLoans } from "../lib/queries";
 import { ErrorState, LenderAvatar, PageHeader, ProgressBar, SelectField, Spinner, cx } from "../components/ui";
 import { LOAN_SORTS, readLoanSort, saveLoanSort, sortLoans, type LoanSort } from "../lib/sort-loans";
@@ -80,8 +80,20 @@ export function Loans() {
             <div className="text-right">
               <p className="text-xs text-muted">{t("loans.emi")}</p>
               <p className="num font-bold">{f.money(l.summary.emi, l.currency)}</p>
+              {l.splits.length > 0 && (
+                <>
+                  <p className="mt-1 text-xs text-muted">{l.access === "owner" ? t("loans.yourShare") : t("loans.ownerShare", { name: l.ownerName ?? "" })}</p>
+                  <p className="num text-sm font-semibold text-accent-text">{f.money(splitAmount(l.summary.emi, l.splits).mine, l.currency)}</p>
+                </>
+              )}
             </div>
           </div>
+          {l.splits.length > 0 && (
+            <p className="mt-2 flex min-w-0 items-center gap-1 text-xs text-muted">
+              <Users size={13} className="shrink-0 text-accent-text" aria-hidden />
+              <span className="truncate">{t("loans.splitWith", { names: l.splits.map((x) => x.name).join(", ") })}</span>
+            </p>
+          )}
           <div className="mt-4">
             <ProgressBar value={l.progress.progress} label={t("loans.progress", { percent: Math.round(l.progress.progress * 100) })} />
             <div className="mt-2 flex justify-between text-xs text-muted">

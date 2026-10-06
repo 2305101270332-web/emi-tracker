@@ -59,6 +59,17 @@ describe("planLumpSum", () => {
     expect(ids(planLumpSum([pricey, personal], 50_000_00, "interest"))).toEqual(["personal"]);
   });
 
+  it("supports flat charges, and skips a prepayment whose charges outweigh the saving", () => {
+    const flat = { ...card, chargeFlat: 500_00, chargeTaxRate: 18 }; // ₹590 with GST
+    const p = planLumpSum([flat, personal], 50_000_00, "interest");
+    expect(p.allocations[0]).toMatchObject({ id: "card", closes: true, charges: 590_00, cost: 30_590_00 });
+    expect(p.used).toBe(50_000_00);
+    // ₹1,000 can't close anything; a ₹2,000 flat fee on a part-payment saves nothing.
+    const steep = { ...personal, chargeFlat: 2_000_00 };
+    expect(planLumpSum([steep], 1_000_00, "interest").allocations).toEqual([]);
+    expect(planLumpSum([steep], 5_000_00, "interest").allocations).toEqual([]);
+  });
+
   it("handles nothing to allocate", () => {
     expect(planLumpSum(debts, 0, "interest")).toMatchObject({ allocations: [], used: 0, leftover: 0 });
     expect(planLumpSum([], 10_000_00, "cashflow")).toMatchObject({ allocations: [], leftover: 10_000_00 });

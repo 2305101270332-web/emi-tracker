@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { CalendarPlus, Download, FileDown, FileSpreadsheet, FileText, Info, Paperclip, Send, Trash2, TrendingUp, UserRound, Wallet } from "lucide-react";
-import { parseMajor, simulatePrepayment, type PrepaymentResult } from "@emi/core";
+import { parseMajor, simulatePrepayment, toMajorString, type PrepaymentResult } from "@emi/core";
 import { DOCUMENT_TYPES, duesToIcs, scheduleToCsv, toLoanTerms, type LoanDetail, type UpcomingItem } from "@emi/shared";
 import { HttpError, errorMessage } from "../lib/api";
 import { downloadBlob, slug } from "../lib/download";
@@ -155,8 +155,13 @@ export function PrepaySimulator({ loan }: { loan: LoanDetail }) {
   const [date, setDate] = useState(next);
   const [amount, setAmount] = useState("");
   const [mode, setMode] = useState<"reduce_tenure" | "reduce_emi">("reduce_tenure");
-  const [charge, setCharge] = useState("0");
-  const [chargeTax, setChargeTax] = useState(String(loan.interestTaxEnabled ? loan.interestTaxRate : loan.processingFeeTaxRate || 0));
+  // Start from the loan's saved pre-closure charge; the user can try other numbers here.
+  const saved = loan.prepaymentCharge;
+  const [chargeKind, setChargeKind] = useState<"percent" | "flat">(saved.kind === "flat" ? "flat" : "percent");
+  const [charge, setCharge] = useState(saved.kind === "flat" ? toMajorString(saved.amount, loan.currency) : saved.kind === "percent" ? String(saved.percent) : "0");
+  const [chargeTax, setChargeTax] = useState(
+    String(saved.kind !== "none" ? loan.prepaymentChargeTaxRate : loan.interestTaxEnabled ? loan.interestTaxRate : loan.processingFeeTaxRate || 0),
+  );
   const [result, setResult] = useState<PrepaymentResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const terms = useMemo(() => termsForLoan(loan), [loan]);
@@ -177,7 +182,14 @@ export function PrepaySimulator({ loan }: { loan: LoanDetail }) {
     setError(null);
     try {
       setResult(
-        simulatePrepayment(terms, { date, amount: parseMajor(amount, loan.currency), mode, chargePercent: Number(charge) || 0, chargeTaxRate: Number(chargeTax) || 0 }),
+        simulatePrepayment(terms, {
+          date,
+          amount: parseMajor(amount, loan.currency),
+          mode,
+          chargePercent: chargeKind === "percent" ? Number(charge) || 0 : 0,
+          chargeFlat: chargeKind === "flat" && charge ? parseMajor(charge, loan.currency) : 0,
+          chargeTaxRate: Number(chargeTax) || 0,
+        }),
       );
     } catch (ex) {
       setResult(null);
@@ -195,9 +207,26 @@ export function PrepaySimulator({ loan }: { loan: LoanDetail }) {
           <option value="reduce_tenure">{t("prepay.reduceTenure")}</option>
           <option value="reduce_emi">{t("prepay.reduceEmi")}</option>
         </SelectField>
-        <TextField label={t("prepay.chargePercent")} inputMode="decimal" value={charge} onChange={(e) => setCharge(e.target.value)} />
+        <SelectField
+          label={t("extraCash.chargeKind")}
+          value={chargeKind}
+          onChange={(e) => {
+            setChargeKind(e.target.value as typeof chargeKind);
+            setCharge("0");
+          }}
+        >
+          <option value="percent">{t("form.prepaymentChargePercent")}</option>
+          <option value="flat">{t("form.feeFlat")}</option>
+        </SelectField>
+        <TextField
+          label={chargeKind === "flat" ? `${t("prepay.chargeFlat")} (${loan.currency})` : t("prepay.chargePercent")}
+          hint={saved.kind !== "none" ? t("prepay.chargeFromLoan") : undefined}
+          inputMode="decimal"
+          value={charge}
+          onChange={(e) => setCharge(e.target.value)}
+        />
         <TextField label={t("prepay.chargeTax")} inputMode="decimal" value={chargeTax} onChange={(e) => setChargeTax(e.target.value)} />
-        <div className="flex items-end">
+        <div className="flex items-end sm:col-span-3">
           <button className="btn-primary w-full" disabled={!amount}>
             <Wallet size={16} aria-hidden /> {t("prepay.simulate")}
           </button>

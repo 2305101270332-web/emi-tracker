@@ -100,3 +100,31 @@ describe("name on card", () => {
     expect(res.json.card).toBeNull();
   });
 });
+
+describe("loan splits and pre-closure charge", () => {
+  it("are saved with the loan without changing its schedule", async () => {
+    const terms = { ...cardLoan("x"), type: "personal", cardId: null };
+    const plain = await alice.post("/loans", terms);
+    const extras = {
+      prepaymentCharge: { kind: "flat", amount: 500_00 },
+      prepaymentChargeTaxRate: 18,
+      splits: [{ name: "Rahul", kind: "flat", amount: 1_000_00 }, { name: "Priya", kind: "percent", percent: 25 }],
+    };
+    const split = await alice.post("/loans", { ...terms, ...extras });
+    expect(split.status).toBe(201);
+    expect(split.json).toMatchObject(extras);
+    expect(split.json.summary).toEqual(plain.json.summary);
+    expect((await alice.get(`/loans/${split.json.id}`)).json).toMatchObject(extras);
+
+    // Editing keeps them; sending none clears them.
+    const kept = await alice.put(`/loans/${split.json.id}`, { ...terms, ...extras, nickname: "Renamed" });
+    expect(kept.json).toMatchObject({ nickname: "Renamed", ...extras });
+    const cleared = await alice.put(`/loans/${split.json.id}`, terms);
+    expect(cleared.json).toMatchObject({ splits: [], prepaymentCharge: { kind: "none" }, prepaymentChargeTaxRate: 0 });
+  });
+
+  it("rejects splits over 100%", async () => {
+    const res = await alice.post("/loans", { ...cardLoan("x"), type: "personal", cardId: null, splits: [{ name: "A", kind: "percent", percent: 101 }] });
+    expect(res.status).toBe(400);
+  });
+});

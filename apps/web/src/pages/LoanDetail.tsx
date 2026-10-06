@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Bell, BellOff, Check, Pencil, PencilLine, SkipForward, Trash2, Undo2, Users } from "lucide-react";
 import { parseMajor, toMajorString } from "@emi/core";
-import type { Instalment, LoanDetail as LoanDetailT } from "@emi/shared";
+import { splitAmount, type Instalment, type LoanDetail as LoanDetailT } from "@emi/shared";
 import { errorMessage } from "../lib/api";
 import { useFormat } from "../lib/format";
 import { useDeleteLoan, useLenders, useLoan, useMuteLoan, useOverride, usePay, useSkip, useUnpay } from "../lib/queries";
@@ -230,7 +230,37 @@ export function LoanDetail() {
             <Stat label={t("schedule.emi")} value={m(s.emi)} strong />
             <Stat label={t("schedule.principalOutstanding")} value={m(loan.progress.principalOutstanding)} />
             <Stat label={t("schedule.interestPaid")} value={m(loan.progress.interestPaid)} />
+            {loan.prepaymentCharge.kind !== "none" && (
+              <Stat
+                label={t("form.prepaymentCharge")}
+                value={`${loan.prepaymentCharge.kind === "flat" ? m(loan.prepaymentCharge.amount) : f.percent(loan.prepaymentCharge.percent)}${loan.prepaymentChargeTaxRate ? ` + ${f.percent(loan.prepaymentChargeTaxRate)} ${taxName}` : ""}`}
+              />
+            )}
           </dl>
+          {loan.splits.length > 0 && (() => {
+            const due = loan.nextInstalment?.totalPayable ?? s.emi;
+            const split = splitAmount(due, loan.splits);
+            return (
+              <div className="mt-4 rounded-xl border border-line p-3">
+                <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-primary-strong">
+                  <Users size={15} aria-hidden /> {t("loans.splitTitle")}
+                  <span className="font-normal text-muted">· {t("loans.splitNext", { amount: m(due) })}</span>
+                </p>
+                <dl className="space-y-1 text-sm">
+                  <div className="flex justify-between gap-2 font-semibold">
+                    <dt>{loan.access === "owner" ? t("loans.you") : t("loans.ownerShare", { name: loan.ownerName ?? "" })}</dt>
+                    <dd className="num text-accent-text">{m(split.mine)}</dd>
+                  </div>
+                  {split.others.map((o, i) => (
+                    <div key={i} className="flex justify-between gap-2">
+                      <dt className="text-muted">{o.name}</dt>
+                      <dd className="num">{m(o.amount)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            );
+          })()}
         </Section>
 
         <Section title={t("schedule.summary")} className="lg:col-span-2">

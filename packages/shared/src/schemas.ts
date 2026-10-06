@@ -104,6 +104,13 @@ export const feeSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("percent"), percent }),
 ]);
 
+/** Someone else paying part of each instalment: a % of it, or a fixed amount (minor units). */
+export const loanSplitSchema = z.discriminatedUnion("kind", [
+  z.object({ name: shortText(60).min(1), kind: z.literal("percent"), percent: z.number().gt(0).max(100) }),
+  z.object({ name: shortText(60).min(1), kind: z.literal("flat"), amount: minor.positive().max(1e14) }),
+]);
+export type LoanSplit = z.infer<typeof loanSplitSchema>;
+
 export const loanInputSchema = z
   .object({
     lenderId: id,
@@ -135,12 +142,19 @@ export const loanInputSchema = z
       .default({ enabled: false, dayCount: 365, collection: "first_instalment" }),
     noCostEmi: z.boolean().default(false),
     holidayRule: z.enum(["none", "previous_working_day", "next_working_day"]).default("none"),
+    /** Pre-closure / part-payment charge the lender takes, plus tax on it. Only used by the prepayment tools. */
+    prepaymentCharge: feeSchema.default({ kind: "none" }),
+    prepaymentChargeTaxRate: percent.default(0),
+    /** Other people who pay part of each instalment. */
+    splits: z.array(loanSplitSchema).max(10).default([]),
     notes: shortText(2000).optional(),
     muted: z.boolean().default(false),
   })
   .superRefine((l, ctx) => {
     if (l.firstEmiDate < l.bookingDate) ctx.addIssue({ code: "custom", path: ["firstEmiDate"], message: "first_emi_before_booking" });
     if (l.type === "credit_card_emi" && !l.cardId) ctx.addIssue({ code: "custom", path: ["cardId"], message: "card_required" });
+    const splitPercent = l.splits.reduce((s, x) => s + (x.kind === "percent" ? x.percent : 0), 0);
+    if (splitPercent > 100) ctx.addIssue({ code: "custom", path: ["splits"], message: "splits_over_100" });
     if (l.type === "other" && !l.customTypeLabel) ctx.addIssue({ code: "custom", path: ["customTypeLabel"], message: "required" });
     if (l.emiShift.enabled && l.emiShift.originalFirstEmiDate && l.emiShift.originalFirstEmiDate > l.firstEmiDate)
       ctx.addIssue({ code: "custom", path: ["emiShift", "originalFirstEmiDate"], message: "shift_must_be_later" });

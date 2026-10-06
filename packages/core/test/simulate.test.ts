@@ -21,6 +21,11 @@ describe("prepayment simulator", () => {
     expect(r.netSaving).toBe(r.interestSaved);
     expect(r.foreclosed).toBe(false);
   });
+  it("adds a flat charge (plus tax) to any % charge", () => {
+    const r = simulatePrepayment(base, { date: "2025-04-05", amount: 20_000_00, mode: "reduce_tenure", chargePercent: 1, chargeFlat: 500_00, chargeTaxRate: 18 });
+    expect(r.charges).toBe(200_00 + 500_00 + 126_00);
+    expect(() => simulatePrepayment(base, { date: "2025-04-05", amount: 20_000_00, mode: "reduce_tenure", chargeFlat: -1 })).toThrow();
+  });
   it("reports the lower EMI for reduce-EMI", () => {
     const r = simulatePrepayment(base, { date: "2025-04-05", amount: 20_000_00, mode: "reduce_emi" });
     expect(r.instalmentsAfter).toBe(12);

@@ -47,6 +47,8 @@ export interface Prepayment {
   mode: PrepaymentMode;
   /** Charge as % of the amount prepaid (part-payment / foreclosure charge). */
   chargePercent?: number;
+  /** Flat charge per prepayment in minor units (added to any % charge). */
+  chargeFlat?: Minor;
   /** Tax on the charge in percent (e.g. GST 18). */
   chargeTaxRate?: number;
 }
@@ -219,6 +221,10 @@ function validate(t: LoanTerms): void {
     for (const r of [p.chargePercent, p.chargeTaxRate]) {
       if (r !== undefined && !(r >= 0 && r <= 100)) fail("prepayment", "Prepayment charge and tax must be 0-100%");
     }
+    if (p.chargeFlat !== undefined) {
+      assertMinor(p.chargeFlat, "prepayment charge");
+      if (p.chargeFlat < 0) fail("prepayment", "Prepayment charge can't be negative");
+    }
   }
   if (t.prepayments?.length && t.repaymentType === "flat") fail("prepayment", "Prepayments are supported for reducing-balance loans only");
 }
@@ -323,7 +329,7 @@ function reducingRows(t: LoanTerms, financed: Minor, noCostTotal: Minor | null):
       const p = prepays[prepayIdx++]!;
       const amt = Math.min(p.amount, closing - prepayment);
       if (amt <= 0) continue;
-      const charge = percentOf(amt, p.chargePercent ?? 0);
+      const charge = percentOf(amt, p.chargePercent ?? 0) + (p.chargeFlat ?? 0);
       prepayment += amt;
       prepaymentCharge += charge;
       prepaymentChargeTax += percentOf(charge, p.chargeTaxRate ?? 0);

@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Plus } from "lucide-react";
+import { Plus, Trash2, Users } from "lucide-react";
 import { buildSchedule, currencyFractionDigits, parseISODate, parseMajor, toMajorString } from "@emi/core";
 import {
   COMMON_CURRENCIES,
@@ -9,6 +9,7 @@ import {
   LOAN_TYPES,
   TAX_LABELS,
   loanInputSchema,
+  splitAmount,
   toLoanTerms,
   type Loan,
   type LoanDetail,
@@ -49,8 +50,20 @@ interface FormState {
   shiftOriginal: string;
   shiftDayCount: "365" | "360";
   shiftCollection: "upfront" | "first_instalment";
+  pcKind: "none" | "flat" | "percent";
+  pcAmount: string;
+  pcPercent: string;
+  pcTaxRate: string;
+  splits: SplitRow[];
   notes: string;
   muted: boolean;
+}
+
+interface SplitRow {
+  name: string;
+  kind: "flat" | "percent";
+  /** Major units for "flat", percent for "percent". */
+  value: string;
 }
 
 function initialState(settings: Settings | undefined, loan: Loan | undefined, today: string): FormState {
@@ -83,6 +96,11 @@ function initialState(settings: Settings | undefined, loan: Loan | undefined, to
       shiftOriginal: loan.emiShift.originalFirstEmiDate ?? "",
       shiftDayCount: String(loan.emiShift.dayCount) as "365" | "360",
       shiftCollection: loan.emiShift.collection,
+      pcKind: loan.prepaymentCharge.kind,
+      pcAmount: loan.prepaymentCharge.kind === "flat" ? toMajorString(loan.prepaymentCharge.amount, loan.currency) : "",
+      pcPercent: loan.prepaymentCharge.kind === "percent" ? String(loan.prepaymentCharge.percent) : "",
+      pcTaxRate: String(loan.prepaymentCharge.kind === "none" ? (settings?.taxRate ?? 0) : loan.prepaymentChargeTaxRate),
+      splits: loan.splits.map((x) => ({ name: x.name, kind: x.kind, value: x.kind === "flat" ? toMajorString(x.amount, loan.currency) : String(x.percent) })),
       notes: loan.notes ?? "",
       muted: loan.muted,
     };
@@ -122,6 +140,11 @@ function initialState(settings: Settings | undefined, loan: Loan | undefined, to
     shiftOriginal: "",
     shiftDayCount: "365",
     shiftCollection: "first_instalment",
+    pcKind: "none",
+    pcAmount: "",
+    pcPercent: "",
+    pcTaxRate: String(taxRate),
+    splits: [],
     notes: "",
     muted: false,
   };
@@ -172,6 +195,16 @@ function toRaw(s: FormState): LoanInputRaw {
       dayCount: s.shiftDayCount === "360" ? 360 : 365,
       collection: s.shiftCollection,
     },
+    prepaymentCharge:
+      s.pcKind === "flat"
+        ? { kind: "flat", amount: money(s.pcAmount) }
+        : s.pcKind === "percent"
+          ? { kind: "percent", percent: num(s.pcPercent) }
+          : { kind: "none" },
+    prepaymentChargeTaxRate: s.pcKind === "none" ? 0 : num(s.pcTaxRate || "0"),
+    splits: s.splits.map((x) =>
+      x.kind === "flat" ? { name: x.name, kind: "flat" as const, amount: money(x.value) } : { name: x.name, kind: "percent" as const, percent: num(x.value) },
+    ),
     notes: s.notes || undefined,
     muted: s.muted,
   };
@@ -244,6 +277,14 @@ function LoanFormInner({ loan, settings }: { loan?: LoanDetail; settings?: Setti
     }
   }, [s]);
 
+  /** The user's share of the EMI after the people on the loan pay their parts. */
+  const share = useMemo(() => {
+    if (!preview || !s.splits.length) return null;
+    const parsed = loanInputSchema.safeParse(toRaw(s));
+    return parsed.success ? splitAmount(preview.emi, parsed.data.splits) : null;
+  }, [preview, s]);
+  const setSplit = (i: number, patch: Partial<SplitRow>) => set("splits", s.splits.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+
   const lendersSorted = useMemo(() => {
     const list = [...(lenders.data ?? [])];
     const home = settings?.country;
@@ -256,7 +297,10 @@ function LoanFormInner({ loan, settings }: { loan?: LoanDetail; settings?: Setti
     if (!parsed.success) {
       const map: Record<string, string> = {};
       for (const i of parsed.error.issues) {
-        const key = i.path.join(".").replace(/^processingFee\.(amount|percent)$/, "processingFee");
+        const key = i.path
+          .join(".")
+          .replace(/^(processingFee|prepaymentCharge)\.(amount|percent)$/, "$1")
+          .replace(/^(splits\.\d+)\.(amount|percent)$/, "$1.value");
         map[key] ??= i.code === "invalid_type" || i.message.startsWith("Number must") || i.message.startsWith("Expected") ? "required" : i.message;
       }
       setErrors(map);
@@ -451,6 +495,28 @@ function LoanFormInner({ loan, settings }: { loan?: LoanDetail; settings?: Setti
                 <TextField label={t("form.interestTaxRate")} inputMode="decimal" value={s.interestTaxRate} onChange={(e) => set("interestTaxRate", e.target.value)} error={err("interestTaxRate")} />
               )}
             </div>
+            <div className="mt-4 grid gap-4 border-t border-line pt-4 sm:grid-cols-2">
+              <SelectField
+                label={t("form.prepaymentCharge")}
+                hint={t("form.prepaymentChargeHint")}
+                className="sm:col-span-2"
+                value={s.pcKind}
+                onChange={(e) => set("pcKind", e.target.value as FormState["pcKind"])}
+              >
+                <option value="none">{t("form.feeNone")}</option>
+                <option value="flat">{t("form.feeFlat")}</option>
+                <option value="percent">{t("form.prepaymentChargePercent")}</option>
+              </SelectField>
+              {s.pcKind === "flat" && (
+                <TextField label={`${t("form.prepaymentChargeAmount")} (${s.currency})`} inputMode="decimal" value={s.pcAmount} onChange={(e) => set("pcAmount", e.target.value)} error={err("prepaymentCharge")} />
+              )}
+              {s.pcKind === "percent" && (
+                <TextField label={t("form.prepaymentChargePercentValue")} inputMode="decimal" value={s.pcPercent} onChange={(e) => set("pcPercent", e.target.value)} error={err("prepaymentCharge")} />
+              )}
+              {s.pcKind !== "none" && (
+                <TextField label={t("form.prepaymentChargeTax")} inputMode="decimal" value={s.pcTaxRate} onChange={(e) => set("pcTaxRate", e.target.value)} error={err("prepaymentChargeTaxRate")} />
+              )}
+            </div>
           </Section>
 
           <Section title={t("form.sectionShift")}>
@@ -477,6 +543,48 @@ function LoanFormInner({ loan, settings }: { loan?: LoanDetail; settings?: Setti
             )}
           </Section>
 
+          <Section title={t("form.sectionSplit")}>
+            <p className="mb-3 text-sm text-muted">{t("form.splitIntro")}</p>
+            {s.splits.length > 0 && (
+              <ul className="mb-3 space-y-3">
+                {s.splits.map((x, i) => (
+                  <li key={i} className="grid items-start gap-3 rounded-xl border border-line p-3 sm:grid-cols-[1fr_11rem_9rem_auto]">
+                    <TextField label={t("form.splitName")} value={x.name} onChange={(e) => setSplit(i, { name: e.target.value })} maxLength={60} error={err(`splits.${i}.name`)} />
+                    <SelectField label={t("form.splitKind")} value={x.kind} onChange={(e) => setSplit(i, { kind: e.target.value as SplitRow["kind"], value: "" })}>
+                      <option value="flat">{t("form.splitFlat")}</option>
+                      <option value="percent">{t("form.splitPercent")}</option>
+                    </SelectField>
+                    <TextField
+                      label={x.kind === "flat" ? `${t("form.splitAmount")} (${s.currency})` : t("form.splitPercentValue")}
+                      inputMode="decimal"
+                      value={x.value}
+                      onChange={(e) => setSplit(i, { value: e.target.value })}
+                      error={err(`splits.${i}.value`)}
+                    />
+                    <button
+                      type="button"
+                      className="btn-ghost self-end px-2 text-danger"
+                      onClick={() => set("splits", s.splits.filter((_, j) => j !== i))}
+                      aria-label={t("form.splitRemove", { name: x.name || t("form.splitName") })}
+                    >
+                      <Trash2 size={16} aria-hidden />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {err("splits") && (
+              <p role="alert" className="mb-3 text-sm text-danger">
+                {err("splits")}
+              </p>
+            )}
+            {s.splits.length < 10 && (
+              <button type="button" className="btn-secondary" onClick={() => set("splits", [...s.splits, { name: "", kind: "flat", value: "" }])}>
+                <Users size={16} aria-hidden /> {t("form.splitAdd")}
+              </button>
+            )}
+          </Section>
+
           <Section title={t("form.sectionOther")}>
             <label htmlFor="notes" className="label">
               {t("form.notes")} <span className="font-normal text-muted">({t("common.optional")})</span>
@@ -493,6 +601,12 @@ function LoanFormInner({ loan, settings }: { loan?: LoanDetail; settings?: Setti
                   <dt className="text-muted">{t("form.previewEmi")}</dt>
                   <dd className="num text-xl font-bold text-primary-strong">{f.money(preview.emi, s.currency)}</dd>
                 </div>
+                {share && (
+                  <div className="flex justify-between">
+                    <dt className="text-muted">{t("form.splitYourShare")}</dt>
+                    <dd className="num font-semibold">{f.money(share.mine, s.currency)}</dd>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <dt className="text-muted">{t("schedule.totalInterest")}</dt>
                   <dd className="num">{f.money(preview.totalInterest, s.currency)}</dd>

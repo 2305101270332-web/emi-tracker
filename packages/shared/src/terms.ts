@@ -32,3 +32,17 @@ export function toLoanTerms(
     rateChanges: extras.rateChanges,
   };
 }
+
+/** A loan's saved pre-closure charge as prepayment-engine inputs. */
+export function prepaymentChargeOf(l: Pick<LoanInput, "prepaymentCharge" | "prepaymentChargeTaxRate">): {
+  chargePercent: number;
+  chargeFlat: number;
+  chargeTaxRate: number;
+} {
+  const c = l.prepaymentCharge;
+  return {
+    chargePercent: c.kind === "percent" ? c.percent : 0,
+    chargeFlat: c.kind === "flat" ? c.amount : 0,
+    chargeTaxRate: c.kind === "none" ? 0 : l.prepaymentChargeTaxRate,
+  };
+}

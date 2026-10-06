@@ -106,6 +106,9 @@ export function loanInputFromRow(r: Row): LoanInput {
     emiShift: JSON.parse(String(r.emi_shift)),
     noCostEmi: bool(r.no_cost_emi),
     holidayRule: String(r.holiday_rule) as LoanInput["holidayRule"],
+    prepaymentCharge: JSON.parse(String(r.prepayment_charge ?? '{"kind":"none"}')),
+    prepaymentChargeTaxRate: num(r.prepayment_charge_tax_rate ?? 0),
+    splits: JSON.parse(String(r.splits ?? "[]")),
     notes: str(r.notes) ?? undefined,
     muted: bool(r.muted),
   };
@@ -146,6 +149,9 @@ export function loanColumns(l: LoanInput): Record<string, unknown> {
     emi_shift: JSON.stringify(l.emiShift),
     no_cost_emi: l.noCostEmi ? 1 : 0,
     holiday_rule: l.holidayRule,
+    prepayment_charge: JSON.stringify(l.prepaymentCharge),
+    prepayment_charge_tax_rate: l.prepaymentCharge.kind === "none" ? 0 : l.prepaymentChargeTaxRate,
+    splits: JSON.stringify(l.splits),
     notes: l.notes ?? null,
     muted: l.muted ? 1 : 0,
   };

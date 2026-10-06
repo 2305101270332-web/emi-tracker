@@ -2,13 +2,42 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { CheckCircle2, Info, TrendingDown } from "lucide-react";
-import { parseMajor, planLumpSum, type LumpSumDebt, type LumpSumPlan, type LumpSumStrategy } from "@emi/core";
+import { parseMajor, planLumpSum, toMajorString, type LumpSumDebt, type LumpSumPlan, type LumpSumStrategy } from "@emi/core";
+import type { LoanListItem } from "@emi/shared";
 import { ErrorState, Section, SelectField, Spinner, TextField, cx } from "../components/ui";
 import { useFormat } from "../lib/format";
 import { useLoans, useMe } from "../lib/queries";
 import { debtsFor } from "./Payoff";
 
 const STRATEGIES: LumpSumStrategy[] = ["interest", "cashflow"];
+
+interface ChargeDraft {
+  kind: "none" | "flat" | "percent";
+  /** Major units for "flat", percent for "percent". */
+  value: string;
+  tax: string;
+}
+
+/** A loan's saved pre-closure charge as editable strings. */
+function savedCharge(l: LoanListItem, defaultTax: number): ChargeDraft {
+  const c = l.prepaymentCharge;
+  return {
+    kind: c.kind,
+    value: c.kind === "flat" ? toMajorString(c.amount, l.currency) : c.kind === "percent" ? String(c.percent) : "",
+    tax: String(c.kind === "none" ? defaultTax : l.prepaymentChargeTaxRate),
+  };
+}
+
+function chargeParams(d: ChargeDraft | undefined, currency: string): Pick<LumpSumDebt, "chargePercent" | "chargeFlat" | "chargeTaxRate"> {
+  if (!d || d.kind === "none") return {};
+  let flat = 0;
+  try {
+    flat = d.kind === "flat" && d.value ? Math.max(0, parseMajor(d.value, currency)) : 0;
+  } catch {
+    /* half-typed amount: treat as no charge */
+  }
+  return { chargePercent: d.kind === "percent" ? Number(d.value) || 0 : 0, chargeFlat: flat, chargeTaxRate: Number(d.tax) || 0 };
+}
 
 /** "I have spare money — which loans should I close first?" Uses the same loans as the payoff planner. */
 export function ExtraCashPlanner() {
@@ -22,9 +51,14 @@ export function ExtraCashPlanner() {
   const cur = currency && currencies.includes(currency) ? currency : (currencies.includes(f.defaultCurrency) ? f.defaultCurrency : currencies[0]) ?? f.defaultCurrency;
   const [amount, setAmount] = useState("");
   const [strategy, setStrategy] = useState<LumpSumStrategy>("interest");
-  const [charges, setCharges] = useState<Record<string, string>>({});
-  const [chargeTax, setChargeTax] = useState<string | null>(null);
-  const taxOnCharges = chargeTax ?? String(me.data?.settings.taxRate ?? 0);
+  // What-if edits to each loan's saved pre-closure charge (not saved to the loan).
+  const [edits, setEdits] = useState<Record<string, Partial<ChargeDraft>>>({});
+  const drafts = useMemo(() => {
+    const out: Record<string, ChargeDraft> = {};
+    for (const l of own) out[l.id] = { ...savedCharge(l, me.data?.settings.taxRate ?? 0), ...edits[l.id] };
+    return out;
+  }, [own, edits, me.data?.settings.taxRate]);
+  const editCharge = (id: string, patch: Partial<ChargeDraft>) => setEdits((e) => ({ ...e, [id]: { ...e[id], ...patch } }));
 
   const amountMinor = useMemo(() => {
     try {
@@ -33,10 +67,7 @@ export function ExtraCashPlanner() {
       return 0;
     }
   }, [amount, cur]);
-  const debts: LumpSumDebt[] = useMemo(
-    () => debtsFor(own, cur).map((d) => ({ ...d, chargePercent: Number(charges[d.id]) || 0, chargeTaxRate: Number(taxOnCharges) || 0 })),
-    [own, cur, charges, taxOnCharges],
-  );
+  const debts: LumpSumDebt[] = useMemo(() => debtsFor(own, cur).map((d) => ({ ...d, ...chargeParams(drafts[d.id], cur) })), [own, cur, drafts]);
   const plans = useMemo(
     () => (amountMinor > 0 && debts.length ? (Object.fromEntries(STRATEGIES.map((s) => [s, planLumpSum(debts, amountMinor, s)])) as Record<LumpSumStrategy, LumpSumPlan>) : null),
     [debts, amountMinor],
@@ -84,41 +115,51 @@ export function ExtraCashPlanner() {
           </div>
 
           {debts.length > 0 && (
-            <details className="mt-4 rounded-xl border border-line p-3">
+            <details className="mt-4 rounded-xl border border-line p-3" open={debts.some((d) => (d.chargePercent ?? 0) > 0 || (d.chargeFlat ?? 0) > 0) || undefined}>
               <summary className="cursor-pointer text-sm font-semibold text-primary-strong">{t("extraCash.charges")}</summary>
               <p className="mb-3 mt-2 text-xs text-muted">{t("extraCash.chargesIntro")}</p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-xs text-muted">
-                      <th className="py-1 pr-2 font-medium">{t("extraCash.loan")}</th>
-                      <th className="py-1 pr-2 text-right font-medium">{t("extraCash.rate")}</th>
-                      <th className="py-1 pr-2 text-right font-medium">{t("extraCash.outstanding")}</th>
-                      <th className="w-24 py-1 font-medium">{t("extraCash.chargePercent")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {debts.map((d) => (
-                      <tr key={d.id} className="border-t border-line">
-                        <td className="py-1.5 pr-2">{d.label}</td>
-                        <td className="num py-1.5 pr-2 text-right">{d.annualRate}%</td>
-                        <td className="num py-1.5 pr-2 text-right">{m(d.balance)}</td>
-                        <td className="py-1.5">
-                          <input
-                            className="input min-h-[36px] py-1"
-                            inputMode="decimal"
-                            aria-label={`${t("extraCash.chargePercent")} — ${d.label}`}
-                            value={charges[d.id] ?? ""}
-                            placeholder="0"
-                            onChange={(e) => setCharges((c) => ({ ...c, [d.id]: e.target.value }))}
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <TextField className="mt-3 max-w-[12rem]" label={t("extraCash.chargeTax")} inputMode="decimal" value={taxOnCharges} onChange={(e) => setChargeTax(e.target.value)} />
+              <ul className="divide-y divide-line">
+                {debts.map((d) => {
+                  const c = drafts[d.id]!;
+                  return (
+                    <li key={d.id} className="py-2">
+                      <p className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
+                        <span className="font-medium">{d.label}</span>
+                        <span className="num text-xs text-muted">
+                          {d.annualRate}% · {m(d.balance)}
+                        </span>
+                      </p>
+                      <div className="mt-1 grid grid-cols-[7.5rem_1fr_5.5rem] gap-2">
+                        <SelectField hideLabel label={`${t("extraCash.chargeKind")} — ${d.label}`} value={c.kind} onChange={(e) => editCharge(d.id, { kind: e.target.value as ChargeDraft["kind"], value: "" })}>
+                          <option value="none">{t("extraCash.none")}</option>
+                          <option value="flat">{t("extraCash.flat")}</option>
+                          <option value="percent">{t("extraCash.percent")}</option>
+                        </SelectField>
+                        {c.kind !== "none" && (
+                          <>
+                            <input
+                              className="input"
+                              inputMode="decimal"
+                              aria-label={`${c.kind === "flat" ? `${t("extraCash.chargeValue")} (${cur})` : `${t("extraCash.chargeValue")} (%)`} — ${d.label}`}
+                              placeholder={c.kind === "flat" ? cur : "%"}
+                              value={c.value}
+                              onChange={(e) => editCharge(d.id, { value: e.target.value })}
+                            />
+                            <input
+                              className="input"
+                              inputMode="decimal"
+                              aria-label={`${t("extraCash.chargeTax")} — ${d.label}`}
+                              title={t("extraCash.chargeTax")}
+                              value={c.tax}
+                              onChange={(e) => editCharge(d.id, { tax: e.target.value })}
+                            />
+                          </>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             </details>
           )}
         </Section>

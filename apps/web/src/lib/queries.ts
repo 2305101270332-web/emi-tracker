@@ -51,9 +51,23 @@ export function useMe() {
 
 export const useLenders = () => useQuery({ queryKey: keys.lenders, queryFn: () => api<Lender[]>("/lenders"), staleTime: 5 * 60_000 });
 export const useCards = () => useQuery({ queryKey: keys.cards, queryFn: () => api<Card[]>("/cards") });
-export const useLoans = () => useQuery({ queryKey: keys.loans, queryFn: () => api<LoanListItem[]>("/loans") });
+/**
+ * Fields added after launch. Offline, the service worker can serve loans cached by an older
+ * version without them, so fill in the defaults the API would send.
+ */
+function withLoanDefaults<T extends LoanListItem>(l: T): T {
+  return {
+    ...l,
+    card: l.card ?? null,
+    splits: l.splits ?? [],
+    prepaymentCharge: l.prepaymentCharge ?? { kind: "none" },
+    prepaymentChargeTaxRate: l.prepaymentChargeTaxRate ?? 0,
+  };
+}
+
+export const useLoans = () => useQuery({ queryKey: keys.loans, queryFn: async () => (await api<LoanListItem[]>("/loans")).map(withLoanDefaults) });
 export const useLoan = (id: string | undefined) =>
-  useQuery({ queryKey: keys.loan(id ?? ""), queryFn: () => api<LoanDetail>(`/loans/${id}`), enabled: !!id });
+  useQuery({ queryKey: keys.loan(id ?? ""), queryFn: async () => withLoanDefaults(await api<LoanDetail>(`/loans/${id}`)), enabled: !!id });
 export const useDashboard = () => useQuery({ queryKey: keys.dashboard, queryFn: () => api<Dashboard>("/dashboard") });
 export const useInstalments = (from: string, to: string) =>
   useQuery({ queryKey: keys.instalments(from, to), queryFn: () => api<UpcomingItem[]>(`/instalments?from=${from}&to=${to}`) });
@@ -182,7 +196,8 @@ export const useDeleteAccount = () => useMutation({ mutationFn: (confirmEmail: s
 
 // ---- Phase 3 -----------------------------------------------------------------------------
 
-export const useSharedLoans = () => useQuery({ queryKey: ["loans", "shared"], queryFn: () => api<LoanListItem[]>("/loans/shared") });
+export const useSharedLoans = () =>
+  useQuery({ queryKey: ["loans", "shared"], queryFn: async () => (await api<LoanListItem[]>("/loans/shared")).map(withLoanDefaults) });
 
 function useSharesMutation<TVars>(fn: (v: TVars) => Promise<LoanShare[]>, loanId: (v: TVars) => string) {
   const qc = useQueryClient();

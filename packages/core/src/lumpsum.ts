@@ -8,8 +8,8 @@ import type { Debt } from "./payoff";
  * Model (same as the payoff planner, stated on screen):
  * - Each month a debt accrues interest = balance × annual rate / 12 (rounded), plus tax on
  *   interest; the EMI stays the same, so prepaying shortens the loan (reduce tenure).
- * - A prepayment may carry a charge (% of the principal prepaid) plus tax on that charge,
- *   both paid out of the lump sum.
+ * - A prepayment may carry a charge (% of the principal prepaid and/or a flat amount) plus
+ *   tax on that charge, all paid out of the lump sum.
  * - Strategies:
  *   interest: highest effective rate first — rate incl. tax on interest, minus the charge
  *             spread over the months the loan has left. Loans that cost nothing (0%) get nothing.
@@ -23,6 +23,8 @@ export type LumpSumStrategy = "interest" | "cashflow";
 export interface LumpSumDebt extends Debt {
   /** Prepayment / foreclosure charge as % of the principal prepaid. */
   chargePercent?: number;
+  /** Flat prepayment / foreclosure charge in minor units, added to any % charge. */
+  chargeFlat?: Minor;
   /** Tax on the charge in percent (e.g. GST 18). */
   chargeTaxRate?: number;
 }
@@ -78,14 +80,16 @@ export function runOff(balance: Minor, d: Debt): { interest: Minor; months: numb
 }
 
 function chargeOn(principal: Minor, d: LumpSumDebt): Minor {
-  const charge = roundMinor((principal * (d.chargePercent ?? 0)) / 100);
+  if (principal <= 0) return 0;
+  const charge = roundMinor((principal * (d.chargePercent ?? 0)) / 100) + (d.chargeFlat ?? 0);
   return charge + percentOf(charge, d.chargeTaxRate ?? 0);
 }
 
 /** Largest principal whose principal + charges fits in `cash`. */
 function affordablePrincipal(cash: Minor, d: LumpSumDebt): Minor {
-  const k = ((d.chargePercent ?? 0) / 100) * (1 + (d.chargeTaxRate ?? 0) / 100);
-  let p = Math.min(d.balance, Math.floor(cash / (1 + k)));
+  const tax = 1 + (d.chargeTaxRate ?? 0) / 100;
+  const k = ((d.chargePercent ?? 0) / 100) * tax;
+  let p = Math.min(d.balance, Math.floor(Math.max(0, cash - (d.chargeFlat ?? 0) * tax) / (1 + k)));
   // The division above can land a unit off either way (float + rounded charges).
   while (p > 0 && p + chargeOn(p, d) > cash) p--;
   while (p < d.balance && p + 1 + chargeOn(p + 1, d) <= cash) p++;
@@ -94,7 +98,9 @@ function affordablePrincipal(cash: Minor, d: LumpSumDebt): Minor {
 
 export function effectiveRate(d: LumpSumDebt): number {
   const months = Math.max(1, runOff(d.balance, d).months);
-  const chargePct = (d.chargePercent ?? 0) * (1 + (d.chargeTaxRate ?? 0) / 100);
+  // A flat charge is counted as a % of closing the whole balance.
+  const flatPct = d.balance > 0 ? ((d.chargeFlat ?? 0) / d.balance) * 100 : 0;
+  const chargePct = ((d.chargePercent ?? 0) + flatPct) * (1 + (d.chargeTaxRate ?? 0) / 100);
   return d.annualRate * (1 + (d.interestTaxRate ?? 0) / 100) - (chargePct * 12) / months;
 }
 
@@ -126,11 +132,10 @@ export function planLumpSum(debts: readonly LumpSumDebt[], amount: Minor, strate
   let left = Math.max(0, Math.floor(amount));
   let open = debts.filter((d) => d.balance > 0);
   const allocations: LumpSumAllocation[] = [];
-  const take = (d: LumpSumDebt, principal: Minor) => {
-    const a = allocate(d, principal);
+  const take = (a: LumpSumAllocation) => {
     allocations.push(a);
     left -= a.cost;
-    open = open.filter((o) => o.id !== d.id);
+    open = open.filter((o) => o.id !== a.id);
     return a;
   };
 
@@ -139,7 +144,7 @@ export function planLumpSum(debts: readonly LumpSumDebt[], amount: Minor, strate
       const closable = open.filter((d) => closeCost(d) <= left);
       if (!closable.length) break;
       closable.sort((a, b) => b.minPayment / closeCost(b) - a.minPayment / closeCost(a) || byRate(a, b));
-      take(closable[0]!, closable[0]!.balance);
+      take(allocate(closable[0]!, closable[0]!.balance));
     }
   }
   // "interest" strategy, and the remainder of "cashflow": highest effective rate first.
@@ -147,7 +152,9 @@ export function planLumpSum(debts: readonly LumpSumDebt[], amount: Minor, strate
     if (left <= 0 || effectiveRate(d) <= 0) break;
     const p = affordablePrincipal(left, d);
     if (p <= 0) continue;
-    if (!take(d, p).closes) break; // the money ran out on a part-payment
+    const a = allocate(d, p);
+    if (a.netSaving <= 0) continue; // charges eat the whole saving (e.g. a flat fee on a small part-payment)
+    if (!take(a).closes) break; // the money ran out on a part-payment
   }
 
   const total = (k: "cost" | "interestSaved" | "charges" | "netSaving" | "emiFreed") => allocations.reduce((s, a) => s + a[k], 0);

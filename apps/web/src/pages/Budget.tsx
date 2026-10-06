@@ -9,6 +9,7 @@ import {
   EXPENSE_FREQUENCIES,
   expenseInputSchema,
   monthlyEquivalent,
+  splitAmount,
   summarizeBudget,
   type BudgetRow,
   type Expense,
@@ -17,7 +18,7 @@ import {
 } from "@emi/shared";
 import { errorMessage } from "../lib/api";
 import { useFormat } from "../lib/format";
-import { useDeleteExpense, useExpenses, useInstalments, useMe, useSaveExpense } from "../lib/queries";
+import { useDeleteExpense, useExpenses, useInstalments, useLoans, useMe, useSaveExpense } from "../lib/queries";
 import { Dialog, ErrorState, PageHeader, Section, SelectField, Spinner, StatusBadge, TextField, Toggle, cx } from "../components/ui";
 
 const PRESETS: { key: string; category: ExpenseCategory; frequency?: ExpenseFrequency }[] = [
@@ -137,6 +138,7 @@ function Summary({ row }: { row: BudgetRow }) {
           </dt>
           <dd className="num text-lg font-bold">{m(row.emis)}</dd>
           {row.emisPaid > 0 && <dd className="text-xs text-success">{t("budget.emisPaid", { amount: m(row.emisPaid) })}</dd>}
+          {row.emisOthers > 0 && <dd className="text-xs text-muted">{t("budget.emisOthers", { amount: m(row.emisOthers) })}</dd>}
         </div>
         <div>
           <dt className="flex items-center gap-1.5 text-xs text-muted">
@@ -168,6 +170,7 @@ export function Budget() {
   const f = useFormat();
   const me = useMe();
   const expenses = useExpenses();
+  const loans = useLoans();
   const del = useDeleteExpense();
   const [month, setMonth] = useState(() => f.today().slice(0, 8) + "01");
   const { y, m } = parseISODate(month);
@@ -177,7 +180,12 @@ export function Budget() {
 
   const settings = me.data?.settings;
   const income = settings?.monthlyIncome != null && settings.incomeCurrency ? { amount: settings.monthlyIncome, currency: settings.incomeCurrency } : null;
-  const rows = useMemo(() => summarizeBudget({ expenses: expenses.data ?? [], dues: dues.data ?? [], income }), [expenses.data, dues.data, income?.amount, income?.currency]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Only the user's share of split loans counts towards their budget.
+  const splits = useMemo(() => Object.fromEntries((loans.data ?? []).filter((l) => l.splits.length).map((l) => [l.id, l.splits])), [loans.data]);
+  const rows = useMemo(
+    () => summarizeBudget({ expenses: expenses.data ?? [], dues: dues.data ?? [], income, splits }),
+    [expenses.data, dues.data, income?.amount, income?.currency, splits], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const byCategory = useMemo(() => {
     const groups = new Map<ExpenseCategory, Expense[]>();
     for (const e of expenses.data ?? []) {
@@ -199,7 +207,7 @@ export function Budget() {
     }
   };
 
-  if (expenses.isLoading || dues.isLoading) return <Spinner />;
+  if (expenses.isLoading || dues.isLoading || loans.isLoading) return <Spinner />;
   if (expenses.error) return <ErrorState error={expenses.error} onRetry={() => void expenses.refetch()} />;
   if (dues.error) return <ErrorState error={dues.error} onRetry={() => void dues.refetch()} />;
 
@@ -323,7 +331,14 @@ export function Budget() {
                     <p className="text-xs text-muted">{t("dashboard.payBy", { date: f.date(d.payableDate) })}</p>
                   </div>
                   <StatusBadge status={d.status} />
-                  <p className="num w-28 text-right text-sm font-semibold">{f.money(d.amount, d.currency)}</p>
+                  {splits[d.loanId]?.length ? (
+                    <div className="w-32 text-right">
+                      <p className="num text-sm font-semibold">{f.money(splitAmount(d.amount, splits[d.loanId]).mine, d.currency)}</p>
+                      <p className="text-xs text-muted">{t("budget.shareOf", { amount: f.money(d.amount, d.currency) })}</p>
+                    </div>
+                  ) : (
+                    <p className="num w-32 text-right text-sm font-semibold">{f.money(d.amount, d.currency)}</p>
+                  )}
                 </li>
               ))}
             </ul>
