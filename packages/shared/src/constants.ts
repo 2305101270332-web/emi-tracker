@@ -37,6 +37,9 @@ export type ExpenseFrequency = (typeof EXPENSE_FREQUENCIES)[number];
 /** Keeps the expenses table small (and inside D1's free tier) even for heavy users. */
 export const MAX_EXPENSES_PER_USER = 200;
 
+/** New loans start with a pre-closure charge of this % of the amount prepaid, plus the user's tax rate. */
+export const DEFAULT_PREPAYMENT_CHARGE_PERCENT = 3;
+
 export const INSTALMENT_STATUSES = ["upcoming", "due", "paid", "overdue", "skipped"] as const;
 
 export const DATE_FORMATS = ["DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD", "DD MMM YYYY"] as const;

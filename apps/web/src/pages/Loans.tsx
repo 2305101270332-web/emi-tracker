@@ -1,7 +1,7 @@
 import { useMemo, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { BellOff, CreditCard, Plus, Users } from "lucide-react";
+import { BellOff, CreditCard, Plus, UserRound, Users } from "lucide-react";
 import { useFormat } from "../lib/format";
 import { splitAmount, type CardSnapshot, type LoanListItem } from "@emi/shared";
 import { useLenders, useLoans, useSharedLoans } from "../lib/queries";
@@ -11,15 +11,22 @@ import { LOAN_SORTS, readLoanSort, saveLoanSort, sortLoans, type LoanSort } from
 /** Which card a card EMI is on, and whose name is on it when it isn't the user's own. */
 export function CardLine({ card, className }: { card: CardSnapshot; className?: string }) {
   const { t } = useTranslation();
+  const label = `${card.nickname}${card.last4 ? ` ••${card.last4}` : ""}`;
+  const holder = card.holderName ? t("loans.nameOnCard", { name: card.holderName }) : null;
+  // Two lines, so a long card name never hides whose name is on the card.
   return (
-    <p className={cx("mt-1 flex min-w-0 items-center gap-1 text-xs text-muted", className)}>
-      <CreditCard size={13} className="shrink-0 text-accent-text" aria-hidden />
-      <span className="truncate">
-        {card.nickname}
-        {card.last4 ? ` ••${card.last4}` : ""}
-        {card.holderName && <> · <span className="font-semibold text-fg">{t("loans.nameOnCard", { name: card.holderName })}</span></>}
-      </span>
-    </p>
+    <div className={cx("mt-1 min-w-0 space-y-0.5 text-xs", className)}>
+      <p className="flex min-w-0 items-center gap-1 text-muted" title={label}>
+        <CreditCard size={13} className="shrink-0 text-accent-text" aria-hidden />
+        <span className="truncate">{label}</span>
+      </p>
+      {holder && (
+        <p className="flex min-w-0 items-center gap-1 font-semibold text-fg" title={holder}>
+          <UserRound size={13} className="shrink-0 text-accent-text" aria-hidden />
+          <span className="truncate">{holder}</span>
+        </p>
+      )}
+    </div>
   );
 }
 

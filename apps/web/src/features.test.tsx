@@ -225,3 +225,23 @@ describe("loan splits and pre-closure charge", () => {
     expect(body.prepaymentChargeTaxRate).toBe(18);
   });
 });
+
+describe("pre-closure charge default", () => {
+  it("new loans start at 3% plus the tax rate from settings", async () => {
+    mockApi(base);
+    renderAt("/loans/new");
+    expect(await screen.findByLabelText(en.form.prepaymentChargePercentValue)).toHaveValue("3");
+    expect(screen.getByLabelText(en.form.prepaymentChargeTax)).toHaveValue("18");
+  });
+});
+
+describe("card line", () => {
+  it("puts the name on card on its own line", async () => {
+    mockApi({ ...base, "/loans": [cardEmi] });
+    renderAt("/loans");
+    const holder = await screen.findByText("Name on card: Ravi Rao");
+    const cardName = screen.getByText(/Regalia ••4321/);
+    expect(holder.closest("p")).not.toBe(cardName.closest("p"));
+    expect(holder.closest("p")).toHaveAttribute("title", "Name on card: Ravi Rao");
+  });
+});

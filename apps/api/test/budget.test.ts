@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { MAX_EXPENSES_PER_USER } from "@emi/shared";
 import { resetRateLimits } from "../src/lib/security";
 import { client, createUser, makeEnv } from "./helpers";
@@ -126,5 +128,22 @@ describe("loan splits and pre-closure charge", () => {
   it("rejects splits over 100%", async () => {
     const res = await alice.post("/loans", { ...cardLoan("x"), type: "personal", cardId: null, splits: [{ name: "A", kind: "percent", percent: 101 }] });
     expect(res.status).toBe(400);
+  });
+});
+
+describe("migration 0008: default pre-closure charge", () => {
+  it("gives loans without a charge 3% plus the owner's tax rate, and leaves set charges alone", async () => {
+    const terms = { ...cardLoan("x"), type: "personal", cardId: null };
+    env.DB.db.prepare("UPDATE settings SET tax_rate = 0 WHERE user_id = 'bob'").run();
+    const a = await alice.post("/loans", terms);
+    const b = await bob.post("/loans", terms);
+    const flat = await alice.post("/loans", { ...terms, prepaymentCharge: { kind: "flat", amount: 500_00 }, prepaymentChargeTaxRate: 5 });
+    expect(a.json.prepaymentCharge).toEqual({ kind: "none" });
+
+    env.DB.db.exec(readFileSync(join(__dirname, "..", "migrations", "0008_default_prepayment_charge.sql"), "utf8"));
+
+    expect((await alice.get(`/loans/${a.json.id}`)).json).toMatchObject({ prepaymentCharge: { kind: "percent", percent: 3 }, prepaymentChargeTaxRate: 18 });
+    expect((await bob.get(`/loans/${b.json.id}`)).json).toMatchObject({ prepaymentCharge: { kind: "percent", percent: 3 }, prepaymentChargeTaxRate: 0 });
+    expect((await alice.get(`/loans/${flat.json.id}`)).json).toMatchObject({ prepaymentCharge: { kind: "flat", amount: 500_00 }, prepaymentChargeTaxRate: 5 });
   });
 });
